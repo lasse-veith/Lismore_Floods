@@ -1,0 +1,160 @@
+/* ==========================================================================
+   OW TASK — dashboard design system (light)
+   Lismore 2022 Flood Cost Model — dashboard shell
+   Loaded by index.html. Edit tokens here to change the whole app's look.
+   ========================================================================== */
+
+@font-face {
+  font-family: 'Saira';
+  src: url('assets/fonts/Saira-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-stretch: 50% 125%;
+  font-style: normal;
+}
+
+:root {
+  /* --- surface --- */
+  --bg: #f2f3f5;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f7f8fa;
+  --border: rgba(16, 20, 27, 0.08);
+  --border-strong: rgba(16, 20, 27, 0.14);
+
+  /* --- text --- */
+  --text-primary: #14161a;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9aa1ac;
+
+  /* --- sidebar (stays dark, matches the reference UI even on an otherwise light app) --- */
+  --sidebar-bg: #101114;
+  --sidebar-text: #8b909a;
+  --sidebar-text-hover: #ffffff;
+  --sidebar-active-bg: #ffffff;
+  --sidebar-active-text: #101114;
+  --sidebar-w-collapsed: 76px;
+  --sidebar-w-expanded: 248px;
+
+  /* --- data colour coding (reserved for when page content is added —
+     blue = static, red = actual/repair, green = credibility) --- */
+  --static: #3b6fd6;
+  --static-dim: #3b6fd61a;
+  --actual: #d64545;
+  --actual-dim: #d645451a;
+  --credibility: #1f9d6b;
+  --credibility-dim: #1f9d6b1a;
+  --amber: #c98a1a;
+  --amber-dim: #c98a1a1a;
+
+  /* --- type --- */
+  --font-display: 'Saira', -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Saira', ui-monospace, 'SF Mono', monospace;
+
+  /* --- rhythm --- */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --shadow-card: 0 1px 2px rgba(16, 20, 27, 0.04), 0 10px 24px -12px rgba(16, 20, 27, 0.12);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { background: var(--bg); color-scheme: light; }
+
+body {
+  font-family: var(--font-display);
+  background: var(--bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+.mono { font-family: var(--font-mono); }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+::selection { background: var(--static-dim); color: var(--text-primary); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(16,20,27,0.14); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(16,20,27,0.24); }
+
+/* ==========================================================================
+   SHARED COMPONENTS — reused by every page file (loaded into index.html's
+   #pageFrame). Keep component look-and-feel here so pages stay consistent
+   without each one re-declaring the same card/KPI/icon-button CSS.
+   ========================================================================== */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.icon-btn {
+  width: 34px; height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.icon-btn:hover { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface-sunken); }
+.icon-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.kpi-card-head { display: flex; align-items: flex-start; justify-content: space-between; }
+.kpi-card-label {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.kpi-card-icon {
+  width: 30px; height: 30px; border-radius: 9px;
+  background: var(--surface-sunken);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+.kpi-card-icon svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+
+.kpi-card-value { font-family: var(--font-mono); font-size: 28px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; }
+.kpi-card-value.placeholder { color: var(--text-tertiary); }
+.kpi-card-sub { font-size: 11.5px; color: var(--text-secondary); }
+
+.placeholder-panel {
+  background: var(--surface);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  min-height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+.placeholder-panel .pp-inner { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.placeholder-panel .pp-inner svg { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 1.4; opacity: 0.6; }
+
+/* generic page padding — every page file's own root wraps its content in this */
+.page {
+  padding: 26px 32px 32px;
+  height: 100%;
+  box-sizing: border-box;
+}

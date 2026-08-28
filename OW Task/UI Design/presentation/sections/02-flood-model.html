@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Flood Model</title>
+<link rel="stylesheet" href="../theme.css">
+<style>
+  html, body { width: 1920px; height: 1080px; overflow: hidden; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+  /* Fixed-stage canvas — exact pixel budget instead of responsive flow:
+     map 640x427 (real 3:2 bounds, see heat_map.py's fitBounds fix) + chart
+     640x410 + control 640x54, each its own card, totalling 927px inside
+     the 1080px slide (centered, so ~76px of breathing room top/bottom). */
+  .flood-stack { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+
+  .flood-map-wrap {
+    width: 640px;
+    height: 427px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--bg-raised);
+  }
+  .flood-map-wrap iframe { width: 100%; height: 100%; border: none; display: block; }
+
+  .flood-chart-wrap {
+    width: 640px;
+    height: 410px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--bg-raised);
+  }
+  .flood-chart-wrap iframe { width: 100%; height: 100%; border: none; display: block; }
+
+  /* single shared time control governing both embeds above */
+  .flood-control {
+    width: 640px;
+    height: 54px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--bg-panel);
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .flood-control .fc-play {
+    cursor: pointer; border: 1px solid var(--border-strong); background: var(--static); color: #05070a;
+    border-radius: var(--radius-sm); font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+    padding: 8px 16px; flex-shrink: 0; transition: background 0.2s var(--ease);
+  }
+  .flood-control .fc-play:hover { background: #6ea0ff; }
+  .flood-control input[type="range"] { flex: 1; accent-color: var(--static); }
+  .flood-control .fc-readout {
+    font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); min-width: 150px; text-align: right;
+    white-space: nowrap;
+  }
+  .flood-control .fc-readout b { color: var(--text-primary); }
+  .flood-control .fc-tag {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-tertiary); flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="flood-stack reveal">
+  <div class="flood-map-wrap">
+    <iframe id="floodMap" src="../../../Output/flood_heat_map.html?embedded=1" title="Flood inundation map" loading="lazy"></iframe>
+  </div>
+  <div class="flood-chart-wrap">
+    <iframe id="riverChart" src="../../../Output/river_level_over_time.html?embedded=1" title="River level over time" loading="lazy"></iframe>
+  </div>
+  <div class="flood-control">
+    <button class="fc-play" id="fcPlay">&#9654; Play</button>
+    <span class="fc-tag">Synced</span>
+    <input type="range" id="fcSlider" min="0" max="1" step="1" value="0">
+    <span class="fc-readout" id="fcReadout">—</span>
+  </div>
+</div>
+
+<script>
+  const slider = document.getElementById('fcSlider');
+  const playBtn = document.getElementById('fcPlay');
+  const readout = document.getElementById('fcReadout');
+  const floodMap = document.getElementById('floodMap');
+  const riverChart = document.getElementById('riverChart');
+
+  let maxIndex = null;
+  const ready = { map: false, river: false };
+  let currentFrame = 0;
+  let playing = false, playTimer = null;
+  let autoPlayed = false;
+
+  function seek(frame) {
+    currentFrame = frame;
+    slider.value = frame;
+    floodMap.contentWindow.postMessage({ type: 'ow-seek', frame }, '*');
+    riverChart.contentWindow.postMessage({ type: 'ow-seek', frame }, '*');
+    readout.innerHTML = `Frame <b>${frame + 1}</b> / ${maxIndex + 1}`;
+  }
+
+  function startPlaying() {
+    playing = true;
+    playBtn.innerHTML = '&#10074;&#10074; Pause';
+    playTimer = setInterval(() => {
+      let next = currentFrame + 1;
+      if (next > maxIndex) { stopPlaying(); return; }
+      seek(next);
+    }, 150);
+  }
+  function stopPlaying() {
+    playing = false;
+    playBtn.innerHTML = '&#9654; Play';
+    clearInterval(playTimer);
+  }
+  playBtn.addEventListener('click', () => {
+    if (playing) { stopPlaying(); return; }
+    if (currentFrame >= maxIndex) seek(0);
+    startPlaying();
+  });
+  slider.addEventListener('input', (e) => { stopPlaying(); seek(+e.target.value); });
+
+  window.addEventListener('message', (e) => {
+    if (!e.data) return;
+    if (e.data.type === 'ow-flood-ready') { ready.map = true; onChildReady(e.data.maxIndex); }
+    if (e.data.type === 'ow-river-ready') { ready.river = true; onChildReady(e.data.maxIndex); }
+  });
+
+  function onChildReady(idx) {
+    maxIndex = maxIndex === null ? idx : Math.min(maxIndex, idx);
+    slider.max = maxIndex;
+    if (ready.map && ready.river && !autoPlayed) {
+      seek(0);
+      readout.innerHTML = `Frame <b>1</b> / ${maxIndex + 1}`;
+    }
+  }
+
+  function autoPlayOnce() {
+    if (autoPlayed || maxIndex === null) return;
+    autoPlayed = true;
+    seek(0);
+    startPlaying();
+  }
+
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'ow-activate') {
+      document.body.classList.add('in-view');
+      const tryPlay = () => {
+        if (maxIndex !== null) autoPlayOnce();
+        else setTimeout(tryPlay, 200);
+      };
+      tryPlay();
+    }
+  });
+</script>
+<script src="../embed.js"></script>
+</body>
+</html>

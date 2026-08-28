@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Flooding Data</title>
+<link rel="stylesheet" href="../dashboard-theme.css">
+<style>
+  html, body { height: 100%; overflow: hidden; }
+
+  .flood-page {
+    display: grid;
+    grid-template-rows: 2fr auto 1fr;
+    gap: 16px;
+    height: 100%;
+  }
+
+  .flood-top-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-height: 0; }
+
+  .card { display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .card-sub { font-size: 11.5px; color: var(--text-tertiary); margin-top: 1px; }
+
+  .card-body { flex: 1; min-height: 0; position: relative; background: var(--surface-sunken); }
+  .card-body iframe { width: 100%; height: 100%; border: none; display: block; }
+
+  /* map expand — floats above the rest of the dashboard as an overlay,
+     doesn't reflow the grid it came from */
+  .map-card.expanded {
+    position: fixed;
+    inset: 28px;
+    z-index: 300;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.35);
+  }
+  .expand-backdrop {
+    position: fixed; inset: 0; background: rgba(15,17,21,0.45);
+    z-index: 290; opacity: 0; pointer-events: none; transition: opacity 0.25s var(--ease);
+  }
+  .expand-backdrop.visible { opacity: 1; pointer-events: auto; }
+
+  /* ---------------- shared time control ---------------- */
+  .slider-bar {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 18px 26px;
+    flex-direction: row;
+  }
+
+  .slider-play {
+    width: 44px; height: 44px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--static); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 8px 20px -6px rgba(59,111,214,0.55);
+    transition: background 0.15s var(--ease), transform 0.15s var(--ease);
+  }
+  .slider-play:hover { background: #2f5fc0; transform: scale(1.06); }
+  .slider-play svg { width: 16px; height: 16px; fill: currentColor; }
+
+  .slider-main { flex: 1; display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+
+  .slider-top-row { display: flex; align-items: baseline; justify-content: space-between; }
+  .slider-status { font-size: 12.5px; color: var(--text-tertiary); font-weight: 500; transition: color 0.15s var(--ease); }
+  .slider-status.running { color: var(--static); }
+  .slider-hour { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text-primary); }
+
+  /* chunky rounded track, matches the reference progress-bar proportions —
+     with a soft shadow under the track and the thumb for a raised, tactile feel */
+  .aesthetic-range {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 26px;
+    background: transparent;
+    outline: none; cursor: pointer;
+  }
+  .aesthetic-range::-webkit-slider-runnable-track {
+    height: 11px; border-radius: 999px;
+    background: linear-gradient(to right, var(--static) var(--pct, 0%), #e9eaed var(--pct, 0%));
+    box-shadow: inset 0 1px 2px rgba(16,20,27,0.06);
+  }
+  .aesthetic-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #fff; border: 3px solid var(--static);
+    box-shadow: 0 3px 10px rgba(16,20,27,0.28);
+    margin-top: -5.5px;
+    cursor: pointer;
+    transition: transform 0.15s var(--ease);
+  }
+  .aesthetic-range::-webkit-slider-thumb:hover { transform: scale(1.12); }
+  .aesthetic-range::-moz-range-track { height: 11px; border-radius: 999px; background: #e9eaed; box-shadow: inset 0 1px 2px rgba(16,20,27,0.06); }
+  .aesthetic-range::-moz-range-progress { height: 11px; border-radius: 999px 0 0 999px; background: var(--static); }
+  .aesthetic-range::-moz-range-thumb {
+    width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--static);
+    background: #fff; box-shadow: 0 3px 10px rgba(16,20,27,0.28); cursor: pointer;
+  }
+
+  .slider-bottom-row { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-secondary); }
+  .slider-bottom-row svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; flex-shrink: 0; }
+  .slider-bottom-row b { color: var(--text-primary); font-weight: 700; }
+
+  .kpi-card-value { font-size: 24px; }
+</style>
+</head>
+<body>
+
+<div class="page flood-page">
+
+  <div class="flood-top-row">
+    <div class="card map-card" id="mapCard">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Flood Inundation Map</div>
+          <div class="card-sub">Elevation ("bathtub") scenario model</div>
+        </div>
+        <button class="icon-btn" id="expandBtn" title="Expand map">
+          <svg viewBox="0 0 24 24" id="expandIcon"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+      </div>
+      <div class="card-body">
+        <iframe id="floodMapFrame" src="../../../Output/flood_heat_map.html?embedded=1" title="Flood inundation map" loading="lazy"></iframe>
+      </div>
+    </div>
+
+    <div class="card chart-card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">River Level Over Time</div>
+          <div class="card-sub">Wilsons River gauge, real hydrograph</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <iframe id="riverChartFrame" src="../../../Output/river_level_over_time.html?embedded=1" title="River level over time" loading="lazy"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <div class="card slider-bar">
+    <button class="slider-play" id="floodPlay" title="Play / pause">
+      <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+    <div class="slider-main">
+      <div class="slider-top-row">
+        <span class="slider-status" id="sliderStatus">Ready</span>
+        <span class="slider-hour" id="sliderHour">Hour 0</span>
+      </div>
+      <input type="range" id="floodSlider" class="aesthetic-range" min="0" max="1" step="1" value="0">
+      <div class="slider-bottom-row">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <span id="sliderDateTime"><b>-</b></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-card-head">
+        <span class="kpi-card-label">Properties Flooded</span>
+        <span class="kpi-card-icon"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg></span>
+      </div>
+      <div class="kpi-card-value placeholder" id="kpiFlooded">-</div>
+      <div class="kpi-card-sub" id="kpiFloodedSub">of total portfolio</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card-head">
+        <span class="kpi-card-label">Cost of Damage</span>
+        <span class="kpi-card-icon"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+      </div>
+      <div class="kpi-card-value placeholder" id="kpiCost">-</div>
+      <div class="kpi-card-sub">static pricing, running total</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card-head">
+        <span class="kpi-card-label">Date / Time</span>
+        <span class="kpi-card-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
+      </div>
+      <div class="kpi-card-value placeholder" id="kpiDateTime">-</div>
+      <div class="kpi-card-sub" id="kpiDateTimeSub">since event start</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card-head">
+        <span class="kpi-card-label">Water Level (AHD)</span>
+        <span class="kpi-card-icon"><svg viewBox="0 0 24 24"><path d="M2 17c2 0 2-3 4-3s2 3 4 3 2-3 4-3 2 3 4 3 2-3 4-3"/></svg></span>
+      </div>
+      <div class="kpi-card-value placeholder" id="kpiLevel">-</div>
+      <div class="kpi-card-sub">Wilsons River gauge</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="expand-backdrop" id="expandBackdrop"></div>
+
+<script>
+  const floodMapFrame = document.getElementById('floodMapFrame');
+  const riverChartFrame = document.getElementById('riverChartFrame');
+  const slider = document.getElementById('floodSlider');
+  const playBtn = document.getElementById('floodPlay');
+  const playIcon = document.getElementById('playIcon');
+  const sliderStatus = document.getElementById('sliderStatus');
+  const sliderHour = document.getElementById('sliderHour');
+  const sliderDateTime = document.getElementById('sliderDateTime');
+
+  let maxIndex = null;
+  const ready = { map: false, river: false };
+  let currentFrame = 0;
+  let playing = false, playTimer = null;
+  let autoPlayed = false;
+
+  const PLAY_PATH = '<path d="M8 5v14l11-7z"/>';
+  const PAUSE_PATH = '<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>';
+
+  function setSliderPct(frame) {
+    const pct = maxIndex ? (frame / maxIndex) * 100 : 0;
+    slider.style.setProperty('--pct', pct + '%');
+  }
+
+  function seek(frame) {
+    currentFrame = frame;
+    slider.value = frame;
+    setSliderPct(frame);
+    floodMapFrame.contentWindow.postMessage({ type: 'ow-seek', frame }, '*');
+    riverChartFrame.contentWindow.postMessage({ type: 'ow-seek', frame }, '*');
+  }
+
+  function startPlaying() {
+    playing = true;
+    playIcon.innerHTML = PAUSE_PATH;
+    sliderStatus.textContent = 'Running...';
+    sliderStatus.classList.add('running');
+    playTimer = setInterval(() => {
+      let next = currentFrame + 1;
+      if (next > maxIndex) { stopPlaying(); return; }
+      seek(next);
+    }, 150);
+  }
+  function stopPlaying() {
+    playing = false;
+    playIcon.innerHTML = PLAY_PATH;
+    sliderStatus.textContent = 'Paused';
+    sliderStatus.classList.remove('running');
+    clearInterval(playTimer);
+  }
+  playBtn.addEventListener('click', () => {
+    if (playing) { stopPlaying(); return; }
+    if (currentFrame >= maxIndex) seek(0);
+    startPlaying();
+  });
+  slider.addEventListener('input', (e) => { stopPlaying(); seek(+e.target.value); });
+
+  function onChildReady(idx) {
+    maxIndex = maxIndex === null ? idx : Math.min(maxIndex, idx);
+    slider.max = maxIndex;
+    if (ready.map && ready.river && !autoPlayed) {
+      autoPlayed = true;
+      seek(0);
+      startPlaying();
+    }
+  }
+
+  const fmtCost = (v) => '$' + Math.round(v).toLocaleString();
+
+  window.addEventListener('message', (e) => {
+    if (!e.data) return;
+    if (e.data.type === 'ow-flood-ready') { ready.map = true; onChildReady(e.data.maxIndex); }
+    if (e.data.type === 'ow-river-ready') { ready.river = true; onChildReady(e.data.maxIndex); }
+
+    if (e.data.type === 'ow-flood-stats') {
+      const s = e.data;
+      sliderHour.textContent = 'Hour ' + s.hour;
+      sliderDateTime.innerHTML = `<b>${s.dateLabel}</b>`;
+      document.getElementById('kpiFlooded').textContent = s.floodedCount.toLocaleString();
+      document.getElementById('kpiFlooded').classList.remove('placeholder');
+      document.getElementById('kpiFloodedSub').textContent = s.floodedPct.toFixed(1) + '% of portfolio';
+      document.getElementById('kpiCost').textContent = fmtCost(s.destroyedCostAud);
+      document.getElementById('kpiCost').classList.remove('placeholder');
+      document.getElementById('kpiDateTime').textContent = s.dateLabel;
+      document.getElementById('kpiDateTime').classList.remove('placeholder');
+      document.getElementById('kpiDateTimeSub').textContent = 'hour ' + s.hour + (s.isReading ? ' · real reading' : ' · interpolated');
+      document.getElementById('kpiLevel').textContent = s.waterLevelM.toFixed(2) + 'm';
+      document.getElementById('kpiLevel').classList.remove('placeholder');
+    }
+  });
+
+  /* ---------------- map expand ---------------- */
+  const mapCard = document.getElementById('mapCard');
+  const expandBtn = document.getElementById('expandBtn');
+  const expandIcon = document.getElementById('expandIcon');
+  const backdrop = document.getElementById('expandBackdrop');
+  const EXPAND_PATH = '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/>';
+  const COLLAPSE_PATH = '<path d="M9 3v4a2 2 0 0 1-2 2H3M15 3v4a2 2 0 0 0 2 2h4M3 15h4a2 2 0 0 1 2 2v4M21 15h-4a2 2 0 0 0-2 2v4"/>';
+  let expanded = false;
+
+  function setExpanded(v) {
+    expanded = v;
+    mapCard.classList.toggle('expanded', expanded);
+    backdrop.classList.toggle('visible', expanded);
+    expandIcon.innerHTML = expanded ? COLLAPSE_PATH : EXPAND_PATH;
+    expandBtn.title = expanded ? 'Collapse map' : 'Expand map';
+  }
+  expandBtn.addEventListener('click', () => setExpanded(!expanded));
+  backdrop.addEventListener('click', () => setExpanded(false));
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && expanded) setExpanded(false); });
+</script>
+</body>
+</html>

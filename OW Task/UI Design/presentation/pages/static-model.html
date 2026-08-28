@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Static Model</title>
+<link rel="stylesheet" href="../dashboard-theme.css">
+<script src="../dashboard-data.js"></script>
+<style>
+  html, body { height: 100%; }
+  .page { overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+
+  .section-label {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-tertiary); margin-bottom: 10px;
+  }
+
+  /* ---------------- top KPI row ---------------- */
+  .top-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 16px; }
+
+  .house-kpi {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card); padding: 20px 22px; display: flex; align-items: center; gap: 18px;
+  }
+  .house-kpi .house-icon {
+    width: 58px; height: 58px; border-radius: 16px; flex-shrink: 0;
+    background: var(--static-dim); color: var(--static);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .house-kpi .house-icon svg { width: 32px; height: 32px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+  .house-kpi-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); }
+  .house-kpi-value { font-family: var(--font-mono); font-size: 26px; font-weight: 700; color: var(--text-primary); margin-top: 4px; }
+  .house-kpi-sub { font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+
+  /* ---------------- "how it works" row ---------------- */
+  .logic-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 16px; align-items: stretch; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); display: flex; flex-direction: column; overflow: hidden; }
+  .card-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .card-sub { font-size: 11.5px; color: var(--text-tertiary); margin-top: 2px; }
+  .card-body { flex: 1; padding: 16px 20px; }
+
+  /* depth widget */
+  .sim-body { display: grid; grid-template-columns: 130px 1fr; gap: 18px; }
+  .sim-house svg { width: 100%; height: auto; }
+  .sim-slider-row { margin-top: 10px; }
+
+  /* aesthetic slider, matching the Flooding Data page's shared time control */
+  .aesthetic-range {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 22px;
+    background: transparent;
+    outline: none; cursor: pointer;
+  }
+  .aesthetic-range::-webkit-slider-runnable-track {
+    height: 9px; border-radius: 999px;
+    background: linear-gradient(to right, var(--static) var(--pct, 0%), #e9eaed var(--pct, 0%));
+    box-shadow: inset 0 1px 2px rgba(16,20,27,0.06);
+  }
+  .aesthetic-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; border: 3px solid var(--static);
+    box-shadow: 0 3px 10px rgba(16,20,27,0.28);
+    margin-top: -4.5px;
+    cursor: pointer;
+    transition: transform 0.15s var(--ease);
+  }
+  .aesthetic-range::-webkit-slider-thumb:hover { transform: scale(1.12); }
+  .aesthetic-range::-moz-range-track { height: 9px; border-radius: 999px; background: #e9eaed; box-shadow: inset 0 1px 2px rgba(16,20,27,0.06); }
+  .aesthetic-range::-moz-range-progress { height: 9px; border-radius: 999px 0 0 999px; background: var(--static); }
+  .aesthetic-range::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--static);
+    background: #fff; box-shadow: 0 3px 10px rgba(16,20,27,0.28); cursor: pointer;
+  }
+
+  .sim-depth-readout { text-align: center; font-family: var(--font-mono); font-size: 17px; font-weight: 700; color: var(--static); margin-top: 2px; }
+  .sim-depth-label { text-align: center; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-tertiary); }
+  .sim-comp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; align-content: start; }
+  .sim-card {
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 8px;
+    background: var(--surface-sunken); opacity: 0.35; transition: opacity 0.3s var(--ease), background 0.3s var(--ease);
+  }
+  .sim-card.lit { opacity: 1; background: var(--static-dim); }
+  .sim-card .sc-label { font-size: 9.5px; color: var(--text-secondary); line-height: 1.25; }
+  .sim-card.lit .sc-label { color: var(--text-primary); }
+  .sim-card .sc-value { font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; margin-top: 3px; color: var(--text-tertiary); }
+  .sim-card.lit .sc-value { color: var(--static); }
+  .sim-total-row { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid var(--border); margin-top: 2px; padding-top: 8px; }
+  .sim-total-row .st-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-tertiary); }
+  .sim-total-row .st-value { font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: var(--text-primary); }
+
+  /* info cards */
+  .info-copy { font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; }
+  .info-copy strong { color: var(--text-primary); }
+  .info-stat { display: flex; align-items: baseline; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .info-stat .is-value { font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--static); }
+  .info-stat .is-label { font-size: 11px; color: var(--text-tertiary); }
+
+  .bullet-list { list-style: none; display: flex; flex-direction: column; gap: 9px; font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; }
+  .bullet-list li { position: relative; padding-left: 15px; }
+  .bullet-list li::before { content: ''; position: absolute; left: 0; top: 7px; width: 5px; height: 5px; border-radius: 50%; background: var(--static); }
+  .bullet-list strong { color: var(--text-primary); }
+
+  .details-btn {
+    margin-top: 12px; align-self: flex-start; display: flex; align-items: center; gap: 7px;
+    background: var(--text-primary); color: #fff; border: none; border-radius: 999px;
+    padding: 8px 15px; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: var(--font-display);
+    transition: background 0.15s var(--ease);
+  }
+  .details-btn:hover { background: #2b2d33; }
+  .details-btn svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(15,17,21,0.5); z-index: 400;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s var(--ease);
+  }
+  .modal-backdrop.visible { opacity: 1; pointer-events: auto; }
+  .modal-panel {
+    background: var(--surface); border-radius: var(--radius-lg); width: min(680px, 90vw); max-height: 85vh;
+    overflow-y: auto; box-shadow: 0 40px 100px rgba(0,0,0,0.35);
+    transform: translateY(10px) scale(0.98); transition: transform 0.2s var(--ease);
+  }
+  .modal-backdrop.visible .modal-panel { transform: translateY(0) scale(1); }
+  .modal-head { position: sticky; top: 0; background: var(--surface); display: flex; align-items: center; justify-content: space-between; padding: 20px 26px; border-bottom: 1px solid var(--border); }
+  .modal-head h2 { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+  .modal-close { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface-sunken); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+  .modal-close svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .modal-body { padding: 22px 26px 28px; }
+  .modal-body p { font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
+  .modal-body p + p { margin-top: 12px; }
+  .modal-body strong { color: var(--text-primary); }
+
+  /* ---------------- bottom charts row ---------------- */
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .bar-chart-plot { display: flex; align-items: flex-end; gap: 6px; height: 190px; margin-top: 6px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; min-width: 0; }
+  .bar-track-wrap { position: relative; width: 58%; max-width: 34px; height: 100%; }
+  .bar-track-bg { position: absolute; bottom: 0; left: 0; right: 0; border-radius: 999px; background: var(--surface-sunken); }
+  .bar-fill { position: absolute; bottom: 0; left: 0; right: 0; border-radius: 999px; }
+  .bar-fill.blue { background: linear-gradient(180deg, #6f97e0, var(--static)); }
+  .bar-label { font-size: 9px; color: var(--text-tertiary); text-align: center; line-height: 1.2; }
+  .bar-value { font-size: 9.5px; font-weight: 600; color: var(--text-primary); }
+  .chart-legend-row { display: flex; gap: 16px; font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+  .chart-legend-row .li { display: flex; align-items: center; gap: 6px; }
+  .chart-legend-row .sw { width: 9px; height: 9px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ============== TOP KPI ROW ============== -->
+  <div class="top-row">
+    <div class="house-kpi">
+      <div class="house-icon">
+        <svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h4v-6h6v6h4V10"/></svg>
+      </div>
+      <div>
+        <div class="house-kpi-label">Avg Cost / Impacted House</div>
+        <div class="house-kpi-value" id="kAvgPerHouse">-</div>
+        <div class="house-kpi-sub" id="kAvgPerHouseSub">-</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card-head">
+        <span class="kpi-card-label">Total Static Cost</span>
+        <span class="kpi-card-icon"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+      </div>
+      <div class="kpi-card-value" id="kStaticTotal">-</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card-head">
+        <span class="kpi-card-label">Properties Affected</span>
+        <span class="kpi-card-icon"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg></span>
+      </div>
+      <div class="kpi-card-value" id="kAffected">-</div>
+      <div class="kpi-card-sub" id="kAffectedSub">of total portfolio</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card-head">
+        <span class="kpi-card-label">Real vs Synthetic Fields</span>
+        <span class="kpi-card-icon"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M4 10h16M10 4v16"/></svg></span>
+      </div>
+      <div class="kpi-card-value" id="kSchema">-</div>
+      <div class="kpi-card-sub">of property schema fields real-sourced</div>
+    </div>
+  </div>
+
+  <!-- ============== HOW THE COST MODEL WORKS ============== -->
+  <div>
+    <div class="section-label">How the cost model works</div>
+    <div class="logic-row">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Depth-tiered component triggers</div>
+          <div class="card-sub">Drag the slider for real average component costs</div>
+        </div>
+        <div class="card-body sim-body">
+          <div class="sim-house">
+            <svg viewBox="0 0 160 170">
+              <polygon points="20,70 80,25 140,70 140,155 20,155" fill="#eef0f2" stroke="rgba(16,20,27,0.12)" stroke-width="1"/>
+              <line x1="80" y1="90" x2="80" y2="155" stroke="rgba(16,20,27,0.1)" stroke-width="1"/>
+              <line x1="20" y1="118" x2="140" y2="118" stroke="rgba(16,20,27,0.15)" stroke-width="1" stroke-dasharray="3,3"/>
+              <text x="24" y="114" font-size="7" fill="#9aa1ac" font-family="Saira, sans-serif">FLOOR</text>
+              <clipPath id="simWaterClip"><rect id="simWaterRect" x="20" y="155" width="120" height="0"/></clipPath>
+              <g clip-path="url(#simWaterClip)">
+                <rect x="20" y="70" width="120" height="90" fill="#3b6fd6" fill-opacity="0.55"/>
+              </g>
+            </svg>
+            <div class="sim-slider-row">
+              <input type="range" id="simSlider" class="aesthetic-range" min="0" max="200" step="1" value="0">
+            </div>
+            <div class="sim-depth-readout" id="simDepthVal">0.00m</div>
+            <div class="sim-depth-label">Depth above floor</div>
+          </div>
+          <div class="sim-comp-grid" id="simCompGrid"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Data Source</div>
+          <div class="card-sub">What's real, feeding the model</div>
+        </div>
+        <div class="card-body">
+          <ul class="bullet-list">
+            <li><strong>G-NAF</strong> (Geocoded National Address File): property addresses and coordinates, filtered to the Lismore polygon.</li>
+            <li><strong>1m LiDAR DEM</strong> (2010 survey): ground elevation per property, the same dataset used in the real 2022 damage assessment.</li>
+            <li>The <strong>2022 damage assessment</strong> itself, for real Wilsons River water levels through the event.</li>
+            <li><strong>OpenStreetMap building footprints</strong>: base floor area for around 3,000 properties; the rest are estimated from Census data.</li>
+            <li><strong>2021 Census GCP DataPacks</strong>: calibrates the synthetic dwelling mix for the area.</li>
+          </ul>
+          <button class="details-btn" id="openDataDetails">
+            See more details
+            <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Regional Unit-Cost Volatility</div>
+          <div class="card-sub">Every component, independently</div>
+        </div>
+        <div class="card-body">
+          <ul class="bullet-list">
+            <li>Models normal market volatility with a <strong>log-normal distribution</strong> (15% volatility is normal).</li>
+            <li>The market price is based on <strong>rural NSW trade rate searches</strong>, not metro pricing.</li>
+            <li>Each category splits into sub-categories linked to a property's <strong>affluence and age</strong>.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== BOTTOM CHARTS ============== -->
+  <div class="charts-row">
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">Houses by Distance from River</div>
+        <div class="card-sub">Total portfolio vs. flooded properties, 0-3000m from the riverbank</div>
+      </div>
+      <div class="card-body">
+        <div class="bar-chart-plot" id="riverBarChart"></div>
+        <div class="chart-legend-row">
+          <span class="li"><span class="sw" style="background:var(--surface-sunken);border:1px solid var(--border-strong);"></span>All properties</span>
+          <span class="li"><span class="sw" style="background:var(--static);"></span>Flooded</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="card-title">Static Cost Distribution</div>
+        <div class="card-sub">By component, sums to the full static total</div>
+      </div>
+      <div class="card-body">
+        <div class="bar-chart-plot" id="costBarChart"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============== DATA SOURCE DETAIL MODAL ============== -->
+<div class="modal-backdrop" id="dataModalBackdrop">
+  <div class="modal-panel">
+    <div class="modal-head">
+      <h2>How the Data Was Used</h2>
+      <button class="modal-close" id="closeDataDetails"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <p>
+        Every property starts from a real address in the G-NAF register, filtered down to Lismore,
+        South Lismore, East Lismore, Goonellabah, Girards Hill and Loftville. That's what gives each
+        property its real latitude and longitude, so the whole portfolio sits on genuine ground rather
+        than made-up points scattered around a suburb.
+      </p>
+      <p>
+        Once a property has real coordinates, the 1m LiDAR DEM gives it a real ground elevation. This is
+        the same 2010 survey that fed into the actual 2022 damage assessment, so the elevation values
+        here line up with what was used to judge real flood impact at the time, not a rough estimate
+        pulled from a different source. Combined with the real Wilsons River water levels from that
+        damage assessment, this is what determines exactly how deep the water got at each address, hour
+        by hour through the event.
+      </p>
+      <p>
+        Floor area matters because it drives flooring, painting and demolition costs. Where OpenStreetMap
+        has a building footprint traced for a property (around 3,000 of them), that real footprint is
+        used directly. For the remaining properties, floor area is instead drawn from the 2021 Census
+        GCP DataPacks for the area, using the real distribution of dwelling sizes and types reported for
+        Lismore rather than a single average figure applied to everyone.
+      </p>
+      <p>
+        The Census data does double duty beyond floor area. It also calibrates the mix of construction
+        types, building ages and dwelling structures generated for the synthetic side of the model, so
+        even the parts that aren't measured directly for each property still reflect what's actually
+        typical for housing in this area.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+  const d = window.OW_DATA;
+  const fmtM = (v) => '$' + (v / 1e6).toFixed(1) + 'M';
+  const fmtK = (v) => '$' + Math.round(v).toLocaleString();
+
+  document.getElementById('kStaticTotal').textContent = fmtM(d.hero.staticTotalAud);
+  document.getElementById('kAffected').textContent = d.hero.affectedProperties.toLocaleString();
+  document.getElementById('kAffectedSub').textContent = `of ${d.hero.totalProperties.toLocaleString()} in the portfolio`;
+
+  const avgPerHouse = d.hero.staticTotalAud / d.hero.affectedProperties;
+  document.getElementById('kAvgPerHouse').textContent = fmtK(avgPerHouse);
+  document.getElementById('kAvgPerHouseSub').textContent = `Across ${d.hero.affectedProperties.toLocaleString()} flooded properties`;
+
+  const realPct = Math.round((d.dataSchema.realFieldCount / (d.dataSchema.realFieldCount + d.dataSchema.syntheticFieldCount)) * 100);
+  document.getElementById('kSchema').textContent = realPct + '%';
+
+  // ---------------- data source detail modal ----------------
+  const dataModal = document.getElementById('dataModalBackdrop');
+  document.getElementById('openDataDetails').addEventListener('click', () => dataModal.classList.add('visible'));
+  document.getElementById('closeDataDetails').addEventListener('click', () => dataModal.classList.remove('visible'));
+  dataModal.addEventListener('click', (e) => { if (e.target === dataModal) dataModal.classList.remove('visible'); });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') dataModal.classList.remove('visible'); });
+
+  // ---------------- depth-cost simulator widget ----------------
+  // Uses the mean cost per component across ALL affected properties (not
+  // just triggered ones), so the running total at max depth lands exactly
+  // on the portfolio's real average cost per impacted house shown above.
+  const comps = d.costEngine.componentMeans;
+  const grid = document.getElementById('simCompGrid');
+  comps.forEach((c) => {
+    const card = document.createElement('div');
+    card.className = 'sim-card';
+    card.dataset.tier = c.tier;
+    card.innerHTML = `<div class="sc-label">${c.label}</div><div class="sc-value">${fmtK(c.meanAud)}</div>`;
+    grid.appendChild(card);
+  });
+  const totalRow = document.createElement('div');
+  totalRow.className = 'sim-total-row';
+  totalRow.innerHTML = `<span class="st-label">Running total</span><span class="st-value" id="simTotal">$0</span>`;
+  grid.appendChild(totalRow);
+
+  const slider = document.getElementById('simSlider');
+  const depthVal = document.getElementById('simDepthVal');
+  const waterRect = document.getElementById('simWaterRect');
+  const simTotal = document.getElementById('simTotal');
+  const MAX_SLIDER = 200, MAX_WATER_H = 85;
+
+  function tierForDepth(depth) {
+    if (depth > 0.25) return 2;
+    if (depth > 0.05) return 1;
+    if (depth > 0) return 0;
+    return -1;
+  }
+
+  function updateSim() {
+    const depth = (+slider.value / 100);
+    slider.style.setProperty('--pct', (+slider.value / MAX_SLIDER * 100) + '%');
+    depthVal.textContent = depth.toFixed(2) + 'm';
+    const h = Math.min(MAX_WATER_H, depth * MAX_WATER_H / 0.6);
+    waterRect.setAttribute('y', 155 - h);
+    waterRect.setAttribute('height', h);
+
+    const activeTier = tierForDepth(depth);
+    const cards = [...grid.querySelectorAll('.sim-card')];
+    let sum = 0;
+    cards.forEach((card, idx) => {
+      const lit = +card.dataset.tier <= activeTier;
+      card.classList.toggle('lit', lit);
+      if (lit) sum += comps[idx].meanAud;
+    });
+    simTotal.textContent = fmtK(sum);
+  }
+  slider.addEventListener('input', updateSim);
+  updateSim();
+
+  // ---------------- bottom bar charts (bar.png-style pill bars) ----------------
+  // `total` sizes the grey backdrop pill (the full context/scale for that
+  // column); `sub` — when given — is the narrower colored pill in front of
+  // it (e.g. flooded houses within the total for that distance band). When
+  // there's no `sub`, the colored pill is drawn at the same height as the
+  // backdrop, matching bar.png's single-series look.
+  function renderBarChart(hostId, categories, { total, sub, valueFmt }) {
+    const host = document.getElementById(hostId);
+    const maxVal = Math.max(...total, 1);
+    const fillValues = sub || total;
+    categories.forEach((label, i) => {
+      const col = document.createElement('div');
+      col.className = 'bar-col';
+      const wrap = document.createElement('div');
+      wrap.className = 'bar-track-wrap';
+
+      const bg = document.createElement('div');
+      bg.className = 'bar-track-bg';
+      bg.style.height = Math.max(2, (total[i] / maxVal) * 100) + '%';
+      wrap.appendChild(bg);
+
+      const fill = document.createElement('div');
+      fill.className = 'bar-fill blue';
+      fill.style.height = Math.max(2, (fillValues[i] / maxVal) * 100) + '%';
+      wrap.appendChild(fill);
+
+      col.appendChild(wrap);
+      const valLabel = document.createElement('div');
+      valLabel.className = 'bar-value';
+      valLabel.textContent = valueFmt(fillValues[i]);
+      col.appendChild(valLabel);
+      const catLabel = document.createElement('div');
+      catLabel.className = 'bar-label';
+      catLabel.textContent = label;
+      col.appendChild(catLabel);
+      host.appendChild(col);
+    });
+  }
+
+  // The final bucket is an unbounded "3000m+" catch-all that aggregates the
+  // rest of the portfolio (thousands of properties well away from the
+  // river, essentially none of them flooded) — including it would dwarf
+  // every near-river bar that actually carries the story, so it's dropped
+  // from the chart (the data itself is still real and available in
+  // d.riverDistance if needed elsewhere).
+  renderBarChart('riverBarChart', d.riverDistance.bucketLabels.slice(0, -1), {
+    total: d.riverDistance.totalHouses.slice(0, -1),
+    sub: d.riverDistance.floodedHouses.slice(0, -1),
+    valueFmt: (v) => v.toLocaleString(),
+  });
+
+  const costTotals = d.costEngine.componentTotals;
+  renderBarChart('costBarChart', costTotals.map(c => c.label), {
+    total: costTotals.map(c => c.totalAud),
+    valueFmt: (v) => '$' + (v / 1e6).toFixed(0) + 'M',
+  });
+</script>
+</body>
+</html>

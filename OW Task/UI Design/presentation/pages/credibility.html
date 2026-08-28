@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Credibility Model</title>
+<link rel="stylesheet" href="../dashboard-theme.css">
+<script src="../dashboard-data.js"></script>
+<style>
+  html, body { height: 100%; overflow: hidden; }
+
+  .cred-page {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 16px;
+    height: 100%;
+  }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+  .card-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .card-sub { font-size: 11.5px; color: var(--text-tertiary); margin-top: 2px; }
+  .card-body { flex: 1; min-height: 0; }
+
+  /* ---------------- top-left: explainer ---------------- */
+  .explainer-body { padding: 14px 20px 18px; display: flex; gap: 16px; height: 100%; box-sizing: border-box; min-height: 0; }
+  .explainer-schematic { flex-shrink: 0; width: 108px; height: 108px; }
+  .explainer-schematic svg { width: 100%; height: 100%; }
+  .explainer-copy { display: flex; flex-direction: column; gap: 10px; min-width: 0; justify-content: center; }
+  .explainer-copy p { font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; }
+  .explainer-copy strong { color: var(--text-primary); }
+  .formula-box {
+    font-family: var(--font-mono); font-size: 12px; color: var(--text-primary);
+    background: var(--surface-sunken); border-radius: var(--radius-md); padding: 9px 12px;
+    margin-top: 2px;
+  }
+  .pillar-row { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; margin-top: 2px; align-items: center; }
+  .pillar {
+    display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px;
+    background: var(--surface-sunken); font-size: 11px; font-weight: 600; color: var(--text-primary);
+  }
+  .pillar .pdot { width: 7px; height: 7px; border-radius: 50%; }
+  .details-btn {
+    align-self: flex-start; margin-top: 4px; display: flex; align-items: center; gap: 7px;
+    background: var(--text-primary); color: #fff; border: none; border-radius: 999px;
+    padding: 8px 16px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font-display);
+    transition: background 0.15s var(--ease);
+  }
+  .details-btn:hover { background: #2b2d33; }
+  .details-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  /* ---------------- top-right: map ---------------- */
+  .map-card .card-body iframe { width: 100%; height: 100%; border: none; display: block; }
+  .map-card.expanded { position: fixed; inset: 28px; z-index: 300; box-shadow: 0 30px 80px rgba(0,0,0,0.35); }
+  .expand-backdrop {
+    position: fixed; inset: 0; background: rgba(15,17,21,0.45);
+    z-index: 290; opacity: 0; pointer-events: none; transition: opacity 0.25s var(--ease);
+  }
+  .expand-backdrop.visible { opacity: 1; pointer-events: auto; }
+
+  /* ---------------- bottom charts ---------------- */
+  .chart-card .card-body { padding: 14px 20px 16px; display: flex; flex-direction: column; }
+  .chart-legend-row { display: flex; gap: 16px; font-size: 11px; color: var(--text-secondary); flex-wrap: wrap; }
+  .chart-legend-row .li { display: flex; align-items: center; gap: 6px; }
+  .chart-legend-row .sw { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+  .chart-canvas-wrap { position: relative; flex: 1; min-height: 0; margin-top: 8px; }
+  .chart-canvas-wrap canvas { width: 100%; height: 100%; display: block; }
+
+  /* ---------------- detail modal ---------------- */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(15,17,21,0.5); z-index: 400;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s var(--ease);
+  }
+  .modal-backdrop.visible { opacity: 1; pointer-events: auto; }
+  .modal-panel {
+    background: var(--surface); border-radius: var(--radius-lg); width: min(760px, 90vw); max-height: 85vh;
+    overflow-y: auto; box-shadow: 0 40px 100px rgba(0,0,0,0.35);
+    transform: translateY(10px) scale(0.98); transition: transform 0.2s var(--ease);
+  }
+  .modal-backdrop.visible .modal-panel { transform: translateY(0) scale(1); }
+  .modal-head { position: sticky; top: 0; background: var(--surface); display: flex; align-items: center; justify-content: space-between; padding: 20px 26px; border-bottom: 1px solid var(--border); }
+  .modal-head h2 { font-size: 17px; font-weight: 600; color: var(--text-primary); }
+  .modal-close { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface-sunken); cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+  .modal-close svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .modal-body { padding: 22px 26px 28px; }
+  .modal-body p { font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
+  .modal-body p + p { margin-top: 10px; }
+  .modal-body strong { color: var(--text-primary); }
+  .modal-body code { font-family: var(--font-mono); background: var(--surface-sunken); padding: 1px 6px; border-radius: 4px; font-size: 12px; color: var(--text-primary); }
+  .modal-section-title { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 22px; margin-bottom: 10px; }
+  .sim-table { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin-top: 4px; }
+  .sim-row { display: grid; grid-template-columns: 180px 1fr; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .sim-row:last-child { border-bottom: none; }
+  .sim-row .sim-comp { padding: 10px 14px; background: var(--surface-sunken); color: var(--amber); font-family: var(--font-mono); display: flex; align-items: center; }
+  .sim-row .sim-vars { padding: 10px 14px; color: var(--text-secondary); display: flex; align-items: center; }
+  .const-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 4px; }
+  .const-chip { background: var(--surface-sunken); border-radius: var(--radius-md); padding: 10px 12px; }
+  .const-chip .cc-label { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; }
+  .const-chip .cc-value { font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--text-primary); margin-top: 3px; }
+</style>
+</head>
+<body>
+
+<div class="page" style="padding:0;">
+<div class="cred-page" style="padding:26px 32px 32px; box-sizing:border-box; height:100%;">
+
+  <!-- ============== TOP LEFT — explainer ============== -->
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">The Credibility Model</div>
+        <div class="card-sub">Blending the static estimate with real evidence</div>
+      </div>
+    </div>
+    <div class="card-body explainer-body">
+      <div class="explainer-schematic">
+        <svg viewBox="0 0 200 200" id="schematic"></svg>
+      </div>
+      <div class="explainer-copy">
+        <p>
+          Based on the <strong>Bühlmann credibility model</strong>, the estimate grows automatically more
+          accurate as relevant evidence accumulates from nearby completed repairs, rather than staying
+          fixed at the static day-0 number.
+        </p>
+        <div class="formula-box">estimate = Z &times; market signal + (1 &minus; Z) &times; static estimate</div>
+        <p style="margin-top:2px;">Z is calculated based on three variables:</p>
+        <div class="pillar-row">
+          <span class="pillar"><span class="pdot" style="background:var(--static);"></span>Distance</span>
+          <span class="pillar"><span class="pdot" style="background:var(--credibility);"></span>Similarity</span>
+          <span class="pillar"><span class="pdot" style="background:var(--amber);"></span>Recency</span>
+        </div>
+        <button class="details-btn" id="openDetails">
+          See more details
+          <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== TOP RIGHT — interactive map ============== -->
+  <div class="card map-card" id="mapCard">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Who's Informing This Estimate?</div>
+        <div class="card-sub">Click an incomplete property to see its weighted neighbors</div>
+      </div>
+      <button class="icon-btn" id="expandBtn" title="Expand map">
+        <svg viewBox="0 0 24 24" id="expandIcon"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      </button>
+    </div>
+    <div class="card-body">
+      <iframe id="credMapFrame" src="../../../Output/credibility_map.html?embedded=1" title="Credibility weighting map" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  <!-- ============== BOTTOM LEFT — accuracy over time ============== -->
+  <div class="card chart-card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Accuracy Over Time</div>
+        <div class="card-sub">Remaining cost vs. the credibility model's estimation error</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="chart-legend-row">
+        <span class="li"><span class="sw" style="background:#c7ccd3;"></span>Actual remaining cost</span>
+        <span class="li"><span class="sw" style="background:var(--amber);"></span>Estimation error</span>
+      </div>
+      <div class="chart-canvas-wrap" id="accuracyWrap"><canvas id="accuracyChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- ============== BOTTOM RIGHT — remaining cost over time ============== -->
+  <div class="card chart-card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Remaining Repair Cost Over Time</div>
+        <div class="card-sub">Static vs. actual vs. credibility-updated view</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="chart-legend-row">
+        <span class="li"><span class="sw" style="background:var(--static);"></span>Static</span>
+        <span class="li"><span class="sw" style="background:var(--actual);"></span>Actual</span>
+        <span class="li"><span class="sw" style="background:var(--credibility);"></span>Credibility</span>
+      </div>
+      <div class="chart-canvas-wrap" id="remainingWrap"><canvas id="remainingChart"></canvas></div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<div class="expand-backdrop" id="expandBackdrop"></div>
+
+<!-- ============== DETAIL MODAL — "a new view" with the full maths ============== -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal-panel">
+    <div class="modal-head">
+      <h2>Credibility Model: Technical Detail</h2>
+      <button class="modal-close" id="closeDetails"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <p>
+        A <strong>Bühlmann credibility blend</strong> combines the geospatial evidence signal with the
+        static estimate: <code>Z(i) = n(i) / (n(i) + k)</code>, with <code>k = 250</code>. Few nearby
+        observations → mostly static. Many similar, recent, nearby completions → mostly the real signal.
+      </p>
+      <p>
+        Each of the 9 cost components is estimated independently this way, then combined, so a property
+        similar to nearby evidence on flooring but not on kitchen spec gets a properly mixed estimate,
+        not one blended weight applied to everything.
+      </p>
+
+      <div class="modal-section-title">Tuned constants</div>
+      <div class="const-grid">
+        <div class="const-chip"><div class="cc-label">Distance range</div><div class="cc-value">15 km</div></div>
+        <div class="const-chip"><div class="cc-label">Recency half-life</div><div class="cc-value">30 days</div></div>
+        <div class="const-chip"><div class="cc-label">Bühlmann k</div><div class="cc-value">250</div></div>
+      </div>
+
+      <div class="modal-section-title">Weighting &amp; outlier protection</div>
+      <p>
+        Distance decay is a gentle exponential tilt over a 15km range (not a hard cutoff), recency decays
+        with a 30-day half-life, and a robust-MAD outlier dampener smoothly down-weights any completed job
+        whose realized/static cost ratio sits beyond <code>|z| = 3.0</code> from the local median, so a
+        single unusually expensive (or cheap) nearby repair can't dominate the blend.
+      </p>
+
+      <div class="modal-section-title">Similarity variables per component</div>
+      <div class="sim-table" id="simTable"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const d = window.OW_DATA;
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+  // ---------------- schematic: property in the centre, weighted neighbors ----------------
+  (function drawSchematic() {
+    const svg = document.getElementById('schematic');
+    const cx = 100, cy = 100;
+    const dots = [
+      { r: 62, a: 0.35, size: 4, w: 0.25 }, { r: 40, a: 1.1, size: 5, w: 0.55 },
+      { r: 70, a: 2.0, size: 3, w: 0.18 },  { r: 27, a: 2.8, size: 6, w: 0.8 },
+      { r: 52, a: 3.6, size: 4, w: 0.4 },   { r: 77, a: 4.3, size: 3, w: 0.15 },
+      { r: 37, a: 5.0, size: 5, w: 0.65 },  { r: 64, a: 5.7, size: 3, w: 0.3 },
+      { r: 20, a: 1.6, size: 7, w: 0.9 },   { r: 87, a: 0.9, size: 2, w: 0.1 },
+    ];
+    const ns = 'http://www.w3.org/2000/svg';
+    dots.forEach((p) => {
+      const x = cx + p.r * Math.cos(p.a), y = cy + p.r * Math.sin(p.a);
+      const line = document.createElementNS(ns, 'line');
+      line.setAttribute('x1', cx); line.setAttribute('y1', cy);
+      line.setAttribute('x2', x); line.setAttribute('y2', y);
+      line.setAttribute('stroke', css('--credibility'));
+      line.setAttribute('stroke-width', 1);
+      line.setAttribute('opacity', p.w * 0.5);
+      svg.appendChild(line);
+      const c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', p.size);
+      c.setAttribute('fill', css('--credibility'));
+      c.setAttribute('opacity', p.w);
+      svg.appendChild(c);
+    });
+    const ring = document.createElementNS(ns, 'circle');
+    ring.setAttribute('cx', cx); ring.setAttribute('cy', cy); ring.setAttribute('r', 15);
+    ring.setAttribute('fill', 'none'); ring.setAttribute('stroke', css('--amber'));
+    ring.setAttribute('stroke-width', 1.5); ring.setAttribute('opacity', 0.5);
+    svg.appendChild(ring);
+    const center = document.createElementNS(ns, 'circle');
+    center.setAttribute('cx', cx); center.setAttribute('cy', cy); center.setAttribute('r', 7);
+    center.setAttribute('fill', css('--amber'));
+    svg.appendChild(center);
+  })();
+
+  // ---------------- similarity variable table (modal) ----------------
+  const simVars = {
+    'Flooring': ['flooring', 'construction_type', 'suburb'],
+    'Switchboard / Electrical': ['switchboard_type', 'construction_type', 'suburb'],
+    'Painting / Plasterboard': ['construction_type', 'area_bucket', 'suburb'],
+    'Kitchen / Appliances': ['kitchen_spec', 'affluence_tercile', 'suburb'],
+    'Drying / Decon': ['area_bucket', 'suburb'],
+    'Demolition': ['area_bucket', 'construction_type', 'suburb'],
+  };
+  const simTable = document.getElementById('simTable');
+  Object.entries(simVars).forEach(([comp, vars]) => {
+    const row = document.createElement('div');
+    row.className = 'sim-row';
+    row.innerHTML = `<div class="sim-comp">${comp}</div><div class="sim-vars">${vars.join(' &middot; ')}</div>`;
+    simTable.appendChild(row);
+  });
+
+  // ---------------- detail modal open/close ----------------
+  const modal = document.getElementById('modalBackdrop');
+  document.getElementById('openDetails').addEventListener('click', () => modal.classList.add('visible'));
+  document.getElementById('closeDetails').addEventListener('click', () => modal.classList.remove('visible'));
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('visible'); });
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') modal.classList.remove('visible'); });
+
+  // ---------------- shared canvas chart helpers ----------------
+  function makeResponsiveChart(canvasId, wrapId, drawFn) {
+    const canvas = document.getElementById(canvasId);
+    const wrap = document.getElementById(wrapId);
+    const ctx = canvas.getContext('2d');
+    let W = 0, H = 0;
+    const DPR = Math.min(window.devicePixelRatio || 1, 2);
+    function resize() {
+      W = wrap.clientWidth; H = wrap.clientHeight;
+      canvas.width = W * DPR; canvas.height = H * DPR;
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      drawFn(ctx, W, H, 1);
+    }
+    window.addEventListener('resize', resize);
+    if (window.ResizeObserver) new ResizeObserver(resize).observe(wrap);
+    resize();
+    return { animate: (durationMs) => {
+      const start = performance.now();
+      function step(now) {
+        const p = Math.min(1, (now - start) / durationMs);
+        drawFn(ctx, W, H, 1 - Math.pow(1 - p, 3));
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }};
+  }
+
+  function smoothPath(pts) {
+    const path = new Path2D();
+    if (pts.length === 1) { path.moveTo(pts[0].x, pts[0].y); path.lineTo(pts[0].x, pts[0].y); return path; }
+    path.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const xMid = (pts[i].x + pts[i + 1].x) / 2, yMid = (pts[i].y + pts[i + 1].y) / 2;
+      path.quadraticCurveTo(pts[i].x, pts[i].y, xMid, yMid);
+    }
+    const last = pts[pts.length - 1], secondLast = pts[pts.length - 2];
+    path.quadraticCurveTo(secondLast.x, secondLast.y, last.x, last.y);
+    return path;
+  }
+
+  // ---------------- bottom-right: remaining cost over time (3 lines) ----------------
+  const rem = d.remaining;
+  const remainingChart = makeResponsiveChart('remainingChart', 'remainingWrap', (ctx, W, H, p) => {
+    const PAD = { left: 50, right: 14, top: 14, bottom: 24 };
+    const n = Math.max(1, Math.round(rem.days.length * p));
+    const days = rem.days.slice(0, n);
+    const maxDay = rem.days[rem.days.length - 1];
+    const maxY = Math.max(...rem.static, ...rem.actual, ...rem.credibility) / 1e6 * 1.08;
+    const xPix = (day) => PAD.left + (day / maxDay) * (W - PAD.left - PAD.right);
+    const yPix = (v) => H - PAD.bottom - (v / maxY) * (H - PAD.top - PAD.bottom);
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = '10.5px "Saira", sans-serif';
+    for (let i = 0; i <= 4; i++) {
+      const val = (maxY / 4) * i, y = yPix(val);
+      ctx.strokeStyle = 'rgba(16,20,27,0.06)';
+      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
+      ctx.fillStyle = '#b6bbc4'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillText('$' + val.toFixed(0) + 'M', PAD.left - 8, y);
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let i = 0; i <= 5; i++) {
+      const day = Math.round((maxDay / 5) * i);
+      ctx.fillText('d' + day, xPix(day), H - PAD.bottom + 6);
+    }
+
+    [['static', css('--static')], ['actual', css('--actual')], ['credibility', css('--credibility')]].forEach(([key, color]) => {
+      const pts = days.map((day, i) => ({ x: xPix(day), y: yPix(rem[key][i] / 1e6) }));
+      ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.stroke(smoothPath(pts));
+      const last = pts[pts.length - 1];
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = color; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(last.x, last.y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    });
+  });
+
+  // ---------------- bottom-left: accuracy over time (remaining cost + |error|) ----------------
+  const errorSeries = rem.days.map((_, i) => rem.credibility[i] - rem.actual[i]);
+  const accuracyChart = makeResponsiveChart('accuracyChart', 'accuracyWrap', (ctx, W, H, p) => {
+    const PAD = { left: 50, right: 14, top: 14, bottom: 24 };
+    const n = Math.max(1, Math.round(rem.days.length * p));
+    const days = rem.days.slice(0, n);
+    const maxDay = rem.days[rem.days.length - 1];
+    const maxY = Math.max(...rem.actual, ...errorSeries.map(Math.abs)) / 1e6 * 1.1;
+    const xPix = (day) => PAD.left + (day / maxDay) * (W - PAD.left - PAD.right);
+    const yPix = (v) => H - PAD.bottom - (v / maxY) * (H - PAD.top - PAD.bottom);
+    const baseline = yPix(0);
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = '10.5px "Saira", sans-serif';
+    for (let i = 0; i <= 4; i++) {
+      const val = (maxY / 4) * i, y = yPix(val);
+      ctx.strokeStyle = 'rgba(16,20,27,0.06)';
+      ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
+      ctx.fillStyle = '#b6bbc4'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillText('$' + val.toFixed(0) + 'M', PAD.left - 8, y);
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let i = 0; i <= 5; i++) {
+      const day = Math.round((maxDay / 5) * i);
+      ctx.fillText('d' + day, xPix(day), H - PAD.bottom + 6);
+    }
+
+    function fillArea(pts, color) {
+      const areaPath = new Path2D(smoothPath(pts));
+      areaPath.lineTo(pts[pts.length - 1].x, baseline);
+      areaPath.lineTo(pts[0].x, baseline);
+      areaPath.closePath();
+      ctx.fillStyle = color;
+      ctx.fill(areaPath);
+      return pts;
+    }
+
+    // background: actual remaining cost (context/scale)
+    const remPts = days.map((day, i) => ({ x: xPix(day), y: yPix(rem.actual[i] / 1e6) }));
+    fillArea(remPts, 'rgba(199,204,211,0.55)');
+    ctx.strokeStyle = '#c7ccd3'; ctx.lineWidth = 2; ctx.stroke(smoothPath(remPts));
+
+    // foreground: |error| between the credibility and actual remaining views
+    const errPts = days.map((day, i) => ({ x: xPix(day), y: yPix(Math.abs(errorSeries[i]) / 1e6) }));
+    fillArea(errPts, 'rgba(201,138,26,0.28)');
+    ctx.strokeStyle = css('--amber'); ctx.lineWidth = 2.5; ctx.stroke(smoothPath(errPts));
+  });
+
+  setTimeout(() => { remainingChart.animate(1600); accuracyChart.animate(1600); }, 150);
+
+  /* ---------------- map expand ---------------- */
+  const mapCard = document.getElementById('mapCard');
+  const expandBtn = document.getElementById('expandBtn');
+  const expandIcon = document.getElementById('expandIcon');
+  const backdrop = document.getElementById('expandBackdrop');
+  const EXPAND_PATH = '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/>';
+  const COLLAPSE_PATH = '<path d="M9 3v4a2 2 0 0 1-2 2H3M15 3v4a2 2 0 0 0 2 2h4M3 15h4a2 2 0 0 1 2 2v4M21 15h-4a2 2 0 0 0-2 2v4"/>';
+  let expanded = false;
+
+  function setExpanded(v) {
+    expanded = v;
+    mapCard.classList.toggle('expanded', expanded);
+    backdrop.classList.toggle('visible', expanded);
+    expandIcon.innerHTML = expanded ? COLLAPSE_PATH : EXPAND_PATH;
+    expandBtn.title = expanded ? 'Collapse map' : 'Expand map';
+  }
+  expandBtn.addEventListener('click', () => setExpanded(!expanded));
+  backdrop.addEventListener('click', () => setExpanded(false));
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && expanded) setExpanded(false); });
+</script>
+</body>
+</html>

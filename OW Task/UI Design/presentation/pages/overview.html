@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Overview</title>
+<link rel="stylesheet" href="../dashboard-theme.css">
+<script src="../dashboard-data.js"></script>
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  .page { display: flex; flex-direction: column; gap: 16px; height: 100%; overflow: hidden; box-sizing: border-box; }
+
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
+  .reveal.in { opacity: 1; transform: translateY(0); }
+
+  /* ---------------- intro band ---------------- */
+  .intro-band {
+    position: relative; border-radius: var(--radius-lg); overflow: hidden; flex-shrink: 0;
+    background: linear-gradient(135deg, #101114, #1c2333 60%, #223055);
+    padding: 26px 32px; color: #fff;
+  }
+  .intro-band canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.5; }
+  .intro-inner { position: relative; z-index: 1; max-width: 640px; }
+  .intro-eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.55); }
+  .intro-title { font-size: 25px; font-weight: 700; letter-spacing: -0.015em; margin-top: 8px; line-height: 1.2; }
+  .intro-sub { font-size: 13px; color: rgba(255,255,255,0.72); margin-top: 8px; line-height: 1.55; max-width: 58ch; }
+
+  /* ---------------- body grid: kpi pair + chart (left) / findings (right, full height) ---------------- */
+  .body-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 16px; }
+
+  .kpi-pair { grid-column: 1; grid-row: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .hero-kpi {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card); padding: 18px 20px;
+  }
+  .hero-kpi-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); }
+  .hero-kpi-value { font-family: var(--font-mono); font-size: 28px; font-weight: 700; margin-top: 8px; letter-spacing: -0.01em; }
+  .hero-kpi-sub { font-size: 11.5px; color: var(--text-secondary); margin-top: 4px; }
+  .hero-kpi.gap .hero-kpi-value { color: var(--amber); }
+  .hero-kpi.affected .hero-kpi-value { color: var(--credibility); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+  .card-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .card-sub { font-size: 11.5px; color: var(--text-tertiary); margin-top: 2px; }
+
+  .findings-card { grid-column: 2; grid-row: 1 / 3; }
+  .findings-body { padding: 4px 22px; display: flex; flex-direction: column; justify-content: space-evenly; flex: 1; min-height: 0; }
+  .finding { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .finding:last-child { border-bottom: none; }
+  .finding-num {
+    flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px; background: var(--surface-sunken);
+    display: flex; align-items: center; justify-content: center; font-family: var(--font-mono);
+    font-size: 13px; font-weight: 700; color: var(--text-tertiary);
+  }
+  .finding-text { font-size: 13px; color: var(--text-secondary); line-height: 1.55; align-self: center; }
+  .finding-text strong { color: var(--text-primary); }
+
+  /* ---------------- cost comparison, fills the left column below the kpi pair ---------------- */
+  .compare-card { grid-column: 1; grid-row: 2; }
+  .compare-card .card-body { padding: 0; flex: 1; min-height: 0; }
+  .compare-card .card-body iframe { width: 100%; height: 100%; border: none; display: block; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ============== INTRO BAND ============== -->
+  <div class="intro-band reveal" id="introBand">
+    <canvas id="rippleCanvas"></canvas>
+    <div class="intro-inner">
+      <div class="intro-eyebrow">Lismore, NSW &middot; 28 February 2022</div>
+      <div class="intro-title">What a flood actually costs, versus what you'd estimate on day one</div>
+      <div class="intro-sub">
+        A synthetic property portfolio on real Lismore addresses and elevation data, run against the
+        real February 2022 flood, comparing a static day-one estimate against what repairs actually
+        cost as they played out over the following two years.
+      </div>
+    </div>
+  </div>
+
+  <div class="body-grid">
+    <!-- ============== KPI PAIR ============== -->
+    <div class="kpi-pair">
+      <div class="hero-kpi gap reveal">
+        <div class="hero-kpi-label">Gap</div>
+        <div class="hero-kpi-value" id="kGap">+0.0%</div>
+        <div class="hero-kpi-sub">Actual over static</div>
+      </div>
+      <div class="hero-kpi affected reveal">
+        <div class="hero-kpi-label">Properties Affected</div>
+        <div class="hero-kpi-value" id="kAffected">0</div>
+        <div class="hero-kpi-sub">of <span id="kTotal">-</span> in the portfolio</div>
+      </div>
+    </div>
+
+    <!-- ============== COST COMPARISON ============== -->
+    <div class="card compare-card reveal">
+      <div class="card-head">
+        <div class="card-title">Cost Comparison, Static vs. Actual</div>
+        <div class="card-sub">Drag the chart to inspect any point in time</div>
+      </div>
+      <div class="card-body">
+        <iframe src="../../../Output/price_over_time.html?embedded=1" title="Static vs actual repair cost over time" loading="lazy"></iframe>
+      </div>
+    </div>
+
+    <!-- ============== KEY FINDINGS (full height) ============== -->
+    <div class="card findings-card reveal">
+      <div class="card-head">
+        <div class="card-title">Key Findings</div>
+        <div class="card-sub">What the simulation actually shows</div>
+      </div>
+      <div class="findings-body" id="findingsBody"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const d = window.OW_DATA;
+  const fmtM = (v) => '$' + (v / 1e6).toFixed(1) + 'M';
+
+  // ---------------- ambient ripple background (intro band) ----------------
+  (function ripple() {
+    const canvas = document.getElementById('rippleCanvas');
+    const ctx = canvas.getContext('2d');
+    let w, h, dpr = Math.min(window.devicePixelRatio || 1, 2);
+    function resize() {
+      w = canvas.clientWidth; h = canvas.clientHeight;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+    const rings = [0, 1, 2, 3].map((i) => ({ phase: i * 1.5 }));
+    let t = 0;
+    function frame() {
+      t += 0.006;
+      ctx.clearRect(0, 0, w, h);
+      const cx = w * 0.82, cy = h * 0.35;
+      rings.forEach((r) => {
+        const p = (t + r.phase) % 6;
+        const radius = p * 70;
+        const alpha = Math.max(0, 0.18 - p * 0.03);
+        if (alpha <= 0) return;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      });
+      requestAnimationFrame(frame);
+    }
+    frame();
+  })();
+
+  // ---------------- count-up KPI animation ----------------
+  function countUp(el, target, fmt, ms) {
+    const t0 = performance.now();
+    function step(now) {
+      const p = Math.min(1, (now - t0) / ms);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = fmt(target * eased);
+      if (p < 1) requestAnimationFrame(step);
+      else el.textContent = fmt(target);
+    }
+    requestAnimationFrame(step);
+  }
+
+  countUp(document.getElementById('kGap'), d.hero.gapPct, (v) => '+' + v.toFixed(1) + '%', 1200);
+  countUp(document.getElementById('kAffected'), d.hero.affectedProperties, (v) => Math.round(v).toLocaleString(), 1200);
+  document.getElementById('kTotal').textContent = d.hero.totalProperties.toLocaleString();
+
+  // ---------------- key findings (real numbers only) ----------------
+  const attr = d.mechanism.attribution;
+  const nearRiverFlooded = d.riverDistance.floodedHouses[0] + d.riverDistance.floodedHouses[1];
+  const nearRiverPct = (nearRiverFlooded / d.hero.affectedProperties) * 100;
+
+  const rem = d.remaining;
+  const errorSeries = rem.days.map((_, i) => rem.credibility[i] - rem.actual[i]);
+  const finalActual = d.hero.actualTotalAud;
+  let convergedDay = null;
+  for (let i = 0; i < rem.days.length; i++) {
+    const tail = errorSeries.slice(i);
+    if (Math.abs(errorSeries[i]) / finalActual < 0.1 && tail.every((e) => Math.abs(e) / finalActual < 0.1)) {
+      convergedDay = rem.days[i];
+      break;
+    }
+  }
+
+  const stockoutDay = d.repairModel.stockout.stockoutDay;
+  const warehouses = 7;
+
+  const findings = [
+    `<strong>The static day-one estimate undershoots the final repair cost by ${d.hero.gapPct.toFixed(1)}%</strong> (${fmtM(d.hero.staticTotalAud)} initial vs. ${fmtM(d.hero.actualTotalAud)} actual).`,
+    `<strong>Scope growth drove ${attr.scope.pct.toFixed(1)}% of that price inflation:</strong> houses left untouched accumulate mold and structural damage the longer repairs are delayed, far outweighing market-price surge (${attr.surge.pct.toFixed(1)}%).`,
+    `<strong>Regional trade capacity was a key bottleneck:</strong> the time it took local tradies to work through the repair queue, and local material stock, modelled on ${warehouses} large Lismore warehouses, running out by day ${stockoutDay} and triggering a logistics premium on materials.`,
+    `<strong>Distance from the Wilsons River has a strong correlation with flooding:</strong> ${nearRiverPct.toFixed(0)}% of flooded properties sit within 600m of the riverbank, dropping off sharply further out.`,
+    convergedDay !== null
+      ? `<strong>The credibility model converges to the true final cost significantly better than the static estimate,</strong> landing within 10% of it by day ${convergedDay}, while the static estimate stays fixed at day one, ${d.hero.gapPct.toFixed(0)}% off.`
+      : `<strong>The credibility model converges to the true final cost significantly better than the static estimate,</strong> narrowing steadily as real repairs complete and feed evidence back in, while the static estimate stays fixed at day one.`,
+  ];
+  const findingsBody = document.getElementById('findingsBody');
+  findings.forEach((html, i) => {
+    const row = document.createElement('div');
+    row.className = 'finding';
+    row.innerHTML = `<div class="finding-num">${i + 1}</div><div class="finding-text">${html}</div>`;
+    findingsBody.appendChild(row);
+  });
+
+  // ---------------- scroll-reveal (still used for the initial fade-in on load) ----------------
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('in');
+        revealObserver.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el));
+</script>
+</body>
+</html>

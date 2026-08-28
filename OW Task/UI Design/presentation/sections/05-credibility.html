@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Credibility Model</title>
+<link rel="stylesheet" href="../theme.css">
+<script src="../dashboard-data.js"></script>
+<style>
+  body { padding: 90px 0 100px; }
+
+  .cred-top { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+  @media (max-width: 980px) { .cred-top { grid-template-columns: 1fr; } }
+
+  .cred-panel { background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 22px; height: 100%; }
+  .cred-panel-title { font-size: 13.5px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+  .cred-panel-sub { font-size: 11.5px; color: var(--text-tertiary); margin-bottom: 16px; }
+
+  .schematic-mini { display: flex; gap: 18px; align-items: center; margin-bottom: 16px; }
+  .schematic-mini svg { width: 96px; height: 96px; flex-shrink: 0; }
+  .schematic-mini p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+  .schematic-mini p strong { color: var(--text-primary); }
+
+  .big-chart svg { width: 100%; height: auto; display: block; }
+  .big-chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+  .big-chart-head .bc-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+
+  .converge-stat { margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
+  .converge-stat strong { color: var(--credibility); font-family: var(--font-mono); }
+</style>
+</head>
+<body>
+
+<section class="container">
+  <div class="reveal">
+    <div class="eyebrow"><span class="idx">05</span> Credibility Model</div>
+    <h2 class="section-title">Updating the estimate as real repairs land</h2>
+  </div>
+
+  <div class="cred-top reveal" style="margin-top:30px;">
+
+    <!-- ============== TOP LEFT — logic + collapsible maths ============== -->
+    <div class="cred-panel">
+      <div class="cred-panel-title">How it works</div>
+      <div class="cred-panel-sub">Plain language first — the maths is one click away</div>
+
+      <div class="schematic-mini">
+        <svg viewBox="0 0 200 200" id="schematic"></svg>
+        <p>
+          As each simulated repair completes, it becomes a real observation nearby
+          properties can borrow strength from. <strong>Distance, recency, and
+          similarity</strong> — same construction type, suburb, flooring or kitchen
+          spec — determine how much weight one completed job lends to an unresolved
+          neighbour's estimate.
+        </p>
+      </div>
+      <p style="font-size:13px;color:var(--text-secondary);line-height:1.65;">
+        A <strong style="color:var(--text-primary);">Bühlmann credibility blend</strong> then combines that
+        geospatial signal with the static estimate: <span class="mono">Z(i) = n(i) / (n(i) + k)</span>,
+        with <span class="mono">k = 250</span>. Few nearby observations → mostly static. Many similar,
+        recent, nearby completions → mostly the real signal.
+      </p>
+
+      <details class="disclosure" style="margin-top:20px;">
+        <summary>Show the maths — Bühlmann formula &amp; similarity variables</summary>
+        <div class="disclosure-body">
+          <p><strong style="color:var(--text-primary);">Weighting:</strong> distance decay over a
+          <code>15km</code> gentle range, recency half-life <code>30 days</code>, and a robust-MAD
+          outlier dampener beyond <code>|z| = 3.0</code> — smoothly down-weighted, never a hard cutoff.</p>
+          <p style="margin-top:10px;"><strong style="color:var(--text-primary);">Blend:</strong>
+          each of the 9 cost components is estimated independently, then allocated back using each
+          component's static labour/material baseline share, before combining with
+          <code>Z(i) = n(i) / (n(i) + 250)</code>.</p>
+          <p style="margin-top:10px;"><strong style="color:var(--text-primary);">Similarity variables per component:</strong></p>
+          <div class="sim-table" id="simTable" style="margin-top:10px;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;"></div>
+        </div>
+      </details>
+    </div>
+
+    <!-- ============== TOP RIGHT — accuracy over time (error area chart) ============== -->
+    <div class="cred-panel big-chart">
+      <div class="big-chart-head">
+        <span class="bc-title">Accuracy over time — error vs. final actual total</span>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-swatch" style="background:var(--text-tertiary);opacity:0.6;"></span>Static error (fixed)</span>
+          <span class="legend-item"><span class="legend-swatch swatch-credibility"></span>Credibility error (shrinks)</span>
+        </div>
+      </div>
+      <svg id="chartConvergence"></svg>
+      <div class="converge-stat" id="convergeStat"></div>
+    </div>
+  </div>
+
+  <!-- ============== BOTTOM — remaining repair cost over time ============== -->
+  <div class="cred-panel big-chart reveal" style="margin-top:26px;">
+    <div class="big-chart-head">
+      <span class="bc-title">Remaining repair cost over time</span>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-swatch swatch-static"></span>Static remaining</span>
+        <span class="legend-item"><span class="legend-swatch swatch-actual"></span>Actual remaining</span>
+        <span class="legend-item"><span class="legend-swatch swatch-credibility"></span>Credibility remaining</span>
+      </div>
+    </div>
+    <svg id="chartRemaining"></svg>
+  </div>
+</section>
+
+<script src="../charts.js"></script>
+<script>
+  const d = window.OW_DATA;
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const fmtM = (v) => '$' + (v / 1e6).toFixed(1) + 'M';
+
+  // --- schematic: property in the centre, nearby completed jobs as weighted dots ---
+  (function drawSchematic() {
+    const svg = document.getElementById('schematic');
+    const cx = 100, cy = 100;
+    const dots = [
+      { r: 62, a: 0.35, size: 4, w: 0.25 }, { r: 40, a: 1.1, size: 5, w: 0.55 },
+      { r: 70, a: 2.0, size: 3, w: 0.18 },  { r: 27, a: 2.8, size: 6, w: 0.8 },
+      { r: 52, a: 3.6, size: 4, w: 0.4 },   { r: 77, a: 4.3, size: 3, w: 0.15 },
+      { r: 37, a: 5.0, size: 5, w: 0.65 },  { r: 64, a: 5.7, size: 3, w: 0.3 },
+      { r: 20, a: 1.6, size: 7, w: 0.9 },   { r: 87, a: 0.9, size: 2, w: 0.1 },
+    ];
+    const ns = 'http://www.w3.org/2000/svg';
+    dots.forEach((p) => {
+      const x = cx + p.r * Math.cos(p.a), y = cy + p.r * Math.sin(p.a);
+      const c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', p.size);
+      c.setAttribute('fill', css('--credibility'));
+      c.setAttribute('opacity', p.w);
+      svg.appendChild(c);
+      const line = document.createElementNS(ns, 'line');
+      line.setAttribute('x1', cx); line.setAttribute('y1', cy);
+      line.setAttribute('x2', x); line.setAttribute('y2', y);
+      line.setAttribute('stroke', css('--credibility'));
+      line.setAttribute('stroke-width', 1);
+      line.setAttribute('opacity', p.w * 0.4);
+      svg.insertBefore(line, svg.firstChild);
+    });
+    const center = document.createElementNS(ns, 'circle');
+    center.setAttribute('cx', cx); center.setAttribute('cy', cy); center.setAttribute('r', 7);
+    center.setAttribute('fill', css('--amber'));
+    svg.appendChild(center);
+    const ring = document.createElementNS(ns, 'circle');
+    ring.setAttribute('cx', cx); ring.setAttribute('cy', cy); ring.setAttribute('r', 14);
+    ring.setAttribute('fill', 'none'); ring.setAttribute('stroke', css('--amber'));
+    ring.setAttribute('stroke-width', 1); ring.setAttribute('opacity', 0.5);
+    svg.appendChild(ring);
+  })();
+
+  // --- similarity variable table ---
+  const simVars = {
+    'Flooring': ['flooring', 'construction_type', 'suburb'],
+    'Switchboard / Electrical': ['switchboard_type', 'construction_type', 'suburb'],
+    'Painting / Plasterboard': ['construction_type', 'area_bucket', 'suburb'],
+    'Kitchen / Appliances': ['kitchen_spec', 'affluence_tercile', 'suburb'],
+    'Drying / Decon': ['area_bucket', 'suburb'],
+    'Demolition': ['area_bucket', 'construction_type', 'suburb'],
+  };
+  const simTable = document.getElementById('simTable');
+  Object.entries(simVars).forEach(([comp, vars]) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:180px 1fr;border-bottom:1px solid var(--border);font-size:12.5px;';
+    row.innerHTML = `<div style="padding:10px 16px;background:var(--bg-raised);color:var(--amber);font-family:var(--font-mono);display:flex;align-items:center;">${comp}</div>` +
+      `<div style="padding:10px 16px;color:var(--text-secondary);display:flex;align-items:center;">${vars.join(' · ')}</div>`;
+    simTable.appendChild(row);
+  });
+
+  // --- convergence: error vs final actual, area fill on the credibility side ---
+  function findConvergenceDay(errs, days, threshold) {
+    for (let i = 0; i < errs.length; i++) {
+      const tail = errs.slice(i);
+      if (Math.abs(errs[i]) < threshold && Math.max(...tail.map(Math.abs)) < threshold * 1.6) {
+        return days[i];
+      }
+    }
+    return null;
+  }
+
+  function renderCharts() {
+    const convDays = d.convergence.days;
+    let convergeDay = findConvergenceDay(d.convergence.credibilityErrorPct, convDays, 5);
+    let convergeThreshold = 5;
+    if (convergeDay === null) { convergeDay = findConvergenceDay(d.convergence.credibilityErrorPct, convDays, 10); convergeThreshold = 10; }
+
+    const annotate = convergeDay !== null ? {
+      x: convergeDay,
+      y: d.convergence.credibilityErrorPct[convDays.indexOf(convergeDay)],
+      label: `within ${convergeThreshold}% by day ${convergeDay}`,
+      color: css('--credibility'),
+    } : undefined;
+
+    OWCharts.lineChart(document.getElementById('chartConvergence'), {
+      x: convDays,
+      series: [
+        { values: convDays.map(() => d.convergence.staticErrorPct), color: css('--text-tertiary'), dashed: true },
+        { values: d.convergence.credibilityErrorPct, color: css('--credibility'), fill: true },
+      ],
+      yFormat: (v) => v.toFixed(0) + '%',
+      xFormat: (v) => v,
+      xTicks: 6, yTicks: 4,
+      annotate,
+      animate: true,
+    });
+
+    document.getElementById('convergeStat').innerHTML = convergeDay !== null
+      ? `Converged to within <strong>${convergeThreshold}%</strong> of the final actual total by day <strong>${convergeDay}</strong> — the static estimate's error never moves from <strong style="color:var(--text-secondary);">${d.convergence.staticErrorPct.toFixed(1)}%</strong>.`
+      : `Static estimate's error stays fixed at <strong style="color:var(--text-secondary);">${d.convergence.staticErrorPct.toFixed(1)}%</strong> throughout.`;
+
+    // --- remaining repair cost over time ---
+    OWCharts.lineChart(document.getElementById('chartRemaining'), {
+      x: d.remaining.days,
+      series: [
+        { values: d.remaining.static.map(v => v / 1e6), color: css('--static') },
+        { values: d.remaining.actual.map(v => v / 1e6), color: css('--actual') },
+        { values: d.remaining.credibility.map(v => v / 1e6), color: css('--credibility') },
+      ],
+      yFormat: (v) => '$' + v.toFixed(0) + 'M',
+      xFormat: (v) => v,
+      xTicks: 6, yTicks: 5,
+      shadeBands: d.repairModel.stockout.stockoutDay ? [{
+        x0: d.repairModel.stockout.stockoutDay, x1: d.remaining.days[d.remaining.days.length - 1],
+        color: 'rgba(255,255,255,0.035)', label: 'Stocked out',
+      }] : undefined,
+      animate: true,
+    });
+  }
+
+  let rendered = false;
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'ow-activate') {
+      document.body.classList.add('in-view');
+      if (!rendered) { rendered = true; renderCharts(); }
+    }
+  });
+</script>
+<script src="../embed.js"></script>
+</body>
+</html>

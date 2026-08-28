@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Repair vs Static</title>
+<link rel="stylesheet" href="../theme.css">
+<script src="../dashboard-data.js"></script>
+<style>
+  html, body { width: 1920px; height: 1080px; overflow: hidden; }
+  body { padding: 56px 0 44px; box-sizing: border-box; }
+
+  .rvs-top { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: center; }
+
+  .rvs-headline { font-family: var(--font-mono); font-size: clamp(46px, 5.2vw, 68px); font-weight: 600; color: var(--actual); line-height: 1; margin-top: 18px; }
+  .rvs-headline-label { font-size: 13.5px; color: var(--text-secondary); margin-top: 10px; max-width: 40ch; line-height: 1.55; }
+
+  .donut-card { display: flex; align-items: center; gap: 22px; }
+  .donut-wrap { position: relative; flex-shrink: 0; width: 200px; height: 200px; }
+  .donut-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .donut-center .dc-value { font-family: var(--font-mono); font-size: 22px; font-weight: 600; color: var(--text-primary); }
+  .donut-center .dc-label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 3px; }
+
+  .donut-legend { display: flex; flex-direction: column; gap: 10px; }
+  .dl-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
+  .dl-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .dl-name { color: var(--text-primary); font-weight: 600; }
+  .dl-pct { font-family: var(--font-mono); color: var(--text-secondary); }
+  .dl-aud { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); display: block; margin-top: 1px; }
+  .dl-dominant { color: var(--amber); font-size: 10.5px; font-family: var(--font-mono); margin-top: 2px; }
+
+  .embed-frame iframe { width: 100%; height: 610px; border: none; display: block; }
+  .readout { margin-top: 14px; font-size: 15px; color: var(--text-secondary); white-space: nowrap; }
+  .readout strong { color: var(--text-primary); }
+</style>
+</head>
+<body>
+
+<section class="container">
+  <div class="rvs-top reveal">
+    <div>
+      <div class="eyebrow"><span class="idx">04</span> Repair vs Static Model</div>
+      <div class="rvs-headline" id="rvsHeadline">—</div>
+      <div class="rvs-headline-label">actual cost above the static estimate — driven overwhelmingly by how long properties sat wet, not by what trades charged per hour.</div>
+    </div>
+
+    <div class="panel donut-card" style="padding:20px 24px;">
+      <div class="donut-wrap">
+        <svg viewBox="0 0 120 120" id="donutSvg"></svg>
+        <div class="donut-center">
+          <div class="dc-value" id="donutCenter">—</div>
+          <div class="dc-label">Total uplift</div>
+        </div>
+      </div>
+      <div class="donut-legend" id="donutLegend"></div>
+    </div>
+  </div>
+
+  <div class="embed-frame reveal" style="margin-top:24px;">
+    <iframe src="../../../Output/price_over_time.html?embedded=1" title="Repair cost over time — static vs actual" loading="lazy"></iframe>
+  </div>
+
+  <p class="readout reveal" id="readout"></p>
+</section>
+
+<script>
+  const d = window.OW_DATA;
+  const fmtM = (v) => '$' + (v / 1e6).toFixed(1) + 'M';
+
+  document.getElementById('rvsHeadline').textContent = '+' + d.hero.gapPct.toFixed(1) + '%';
+
+  document.getElementById('readout').innerHTML =
+    `Static pricing put the portfolio at <strong>${fmtM(d.hero.staticTotalAud)}</strong>. ` +
+    `By the time every job actually completed, the real cost reached <strong>${fmtM(d.hero.actualTotalAud)}</strong> — ` +
+    `a <strong>+${d.hero.gapPct.toFixed(1)}%</strong> gap.`;
+
+  // ---------------- donut: exact scope / surge / stockout attribution ----------------
+  const attr = d.mechanism.attribution;
+  const segments = [
+    { key: 'scope', label: 'Scope growth', hex: '#ef5b52' },
+    { key: 'surge', label: 'Market surge', hex: '#f4c95d' },
+    { key: 'stockout', label: 'Stockout logistics', hex: '#c2703e' },
+  ];
+
+  document.getElementById('donutCenter').textContent = fmtM(attr.totalUpliftAud);
+
+  const R = 50, CX = 60, CY = 60, CIRC = 2 * Math.PI * R, STROKE = 20;
+  const svg = document.getElementById('donutSvg');
+  svg.innerHTML = `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="${STROKE}"/>`;
+  let offset = 0;
+  segments.forEach((s) => {
+    const frac = attr[s.key].pct / 100;
+    const len = frac * CIRC;
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', CX); circle.setAttribute('cy', CY); circle.setAttribute('r', R);
+    circle.setAttribute('fill', 'none');
+    circle.setAttribute('stroke', s.hex);
+    circle.setAttribute('stroke-width', STROKE);
+    circle.setAttribute('stroke-dasharray', `${len} ${CIRC - len}`);
+    circle.setAttribute('stroke-dashoffset', -offset);
+    svg.appendChild(circle);
+    offset += len;
+  });
+
+  const dominant = segments.reduce((a, b) => attr[a.key].pct > attr[b.key].pct ? a : b);
+  const legend = document.getElementById('donutLegend');
+  segments.forEach((s) => {
+    const row = document.createElement('div');
+    row.className = 'dl-row';
+    row.innerHTML = `<span class="dl-swatch" style="background:${s.hex};"></span>` +
+      `<span>
+         <span class="dl-name">${s.label}</span> <span class="dl-pct">${attr[s.key].pct.toFixed(1)}%</span>
+         <span class="dl-aud">${fmtM(attr[s.key].aud)}</span>
+         ${s.key === dominant.key ? '<span class="dl-dominant">← dominant driver</span>' : ''}
+       </span>`;
+    legend.appendChild(row);
+  });
+</script>
+<script src="../embed.js"></script>
+</body>
+</html>

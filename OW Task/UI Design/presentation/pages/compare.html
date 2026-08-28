@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Static vs Repair</title>
+<link rel="stylesheet" href="../dashboard-theme.css">
+<script src="../dashboard-data.js"></script>
+<style>
+  html, body { height: 100%; overflow: hidden; }
+
+  .compare-page {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 16px;
+    height: 100%;
+  }
+
+  .card { display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+  .card-head { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .card-title { font-size: 14.5px; font-weight: 600; color: var(--text-primary); }
+  .card-sub { font-size: 11.5px; color: var(--text-tertiary); margin-top: 2px; }
+  .card-body { flex: 1; min-height: 0; }
+
+  /* ---------------- top-left: donut ---------------- */
+  .donut-body {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 18px; padding: 12px 20px 20px; height: 100%; box-sizing: border-box; min-height: 0;
+  }
+  .donut-wrap {
+    position: relative; flex: 1 1 auto; min-height: 0; width: auto;
+    aspect-ratio: 1; max-width: 230px; max-height: 230px;
+  }
+  .donut-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+  .donut-wrap svg circle { cursor: pointer; transition: opacity 0.15s var(--ease); }
+  .donut-wrap svg.has-hover circle.donut-seg:not(.hovered) { opacity: 0.45; }
+  .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
+  .donut-center .dc-value { font-family: var(--font-mono); font-size: 24px; font-weight: 600; color: var(--text-primary); }
+  .donut-center .dc-label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-tertiary); margin-top: 3px; }
+
+  .donut-tooltip {
+    position: absolute; z-index: 20; pointer-events: none; opacity: 0; transform: translate(-50%, calc(-100% - 10px)) scale(0.96);
+    transition: opacity 0.12s var(--ease), transform 0.12s var(--ease);
+    background: #fff; border-radius: 10px; padding: 9px 13px;
+    box-shadow: 0 2px 6px rgba(16,20,27,0.08), 0 14px 28px -14px rgba(16,20,27,0.28);
+    white-space: nowrap;
+  }
+  .donut-tooltip.visible { opacity: 1; transform: translate(-50%, calc(-100% - 14px)) scale(1); }
+  .donut-tooltip .dt-name { font-size: 11.5px; font-weight: 600; color: var(--text-primary); }
+  .donut-tooltip .dt-row { display: flex; align-items: baseline; gap: 8px; margin-top: 2px; }
+  .donut-tooltip .dt-pct { font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
+  .donut-tooltip .dt-aud { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-tertiary); }
+
+  .donut-legend { display: flex; flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 10px 22px; min-width: 0; flex-shrink: 0; }
+  .dl-row { display: flex; align-items: baseline; gap: 7px; font-size: 12.5px; cursor: pointer; }
+  .dl-swatch { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; margin-top: 2px; }
+  .dl-name { color: var(--text-primary); font-weight: 600; }
+  .dl-pct { font-family: var(--font-mono); color: var(--text-secondary); font-size: 12px; }
+  .dl-aud { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-tertiary); display: block; margin-top: 1px; }
+  .dl-dominant { color: var(--static); font-size: 10px; font-family: var(--font-mono); margin-top: 2px; }
+
+  /* ---------------- top-right: repair model mechanism ---------------- */
+  .mech-body { padding: 12px 20px 16px; display: flex; flex-direction: column; gap: 0; height: 100%; box-sizing: border-box; min-height: 0; overflow-y: auto; }
+  .mech-row { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .mech-row:last-child { border-bottom: none; }
+  .mech-icon {
+    flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px; background: var(--surface-sunken);
+    display: flex; align-items: center; justify-content: center; color: var(--static);
+  }
+  .mech-icon svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+  .mech-text { min-width: 0; }
+  .mech-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+  .mech-desc { font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; margin-top: 2px; }
+  .mech-desc strong { color: var(--text-primary); }
+
+  /* ---------------- bottom: full-width animated chart ---------------- */
+  .chart-card { grid-column: 1 / -1; }
+  .chart-card .card-body iframe { width: 100%; height: 100%; border: none; display: block; }
+</style>
+</head>
+<body>
+
+<div class="page compare-page">
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">Cost Increase Breakdown</div>
+      <div class="card-sub">What's driving the gap between static and actual pricing</div>
+    </div>
+    <div class="card-body donut-body">
+      <div class="donut-wrap" id="donutWrap">
+        <svg viewBox="0 0 120 120" id="donutSvg"></svg>
+        <div class="donut-center">
+          <div class="dc-value" id="donutCenter">-</div>
+          <div class="dc-label">Total uplift</div>
+        </div>
+        <div class="donut-tooltip" id="donutTooltip">
+          <div class="dt-name" id="dtName">-</div>
+          <div class="dt-row"><span class="dt-pct" id="dtPct">-</span><span class="dt-aud" id="dtAud">-</span></div>
+        </div>
+      </div>
+      <div class="donut-legend" id="donutLegend"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title">The Repair Model</div>
+      <div class="card-sub">Five stages, chained together</div>
+    </div>
+    <div class="card-body mech-body">
+      <div class="mech-row">
+        <div class="mech-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+        <div class="mech-text">
+          <div class="mech-name">Insurance delay</div>
+          <div class="mech-desc">Log-normal, averaging <strong id="mInsuranceDays">-</strong> days. Models the time for insurance to approve a payout before repairs can start.</div>
+        </div>
+      </div>
+      <div class="mech-row">
+        <div class="mech-icon"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg></div>
+        <div class="mech-text">
+          <div class="mech-name">Repair queue</div>
+          <div class="mech-desc">A Weibull-CDF rollout curve, not linear: a slow start, a steep middle, then a tapering tail as the backlog clears.</div>
+        </div>
+      </div>
+      <div class="mech-row">
+        <div class="mech-icon"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/></svg></div>
+        <div class="mech-text">
+          <div class="mech-name">Market pricing</div>
+          <div class="mech-desc">A log-normal curve driven by supply and demand. As tradies taking on jobs need more resources, market prices climb quickly, peaking around day <strong id="mSurgePeak">-</strong>.</div>
+        </div>
+      </div>
+      <div class="mech-row">
+        <div class="mech-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-6 9 6v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21V12h6v9"/></svg></div>
+        <div class="mech-text">
+          <div class="mech-name">Warehouse stockout</div>
+          <div class="mech-desc">Local stock, modelled on <strong id="mWarehouses">-</strong> large Lismore warehouses, is used up fast. Once it runs out (day <strong id="mStockoutDay">-</strong>), a logistics premium applies to materials.</div>
+        </div>
+      </div>
+      <div class="mech-row">
+        <div class="mech-icon"><svg viewBox="0 0 24 24"><path d="M12 2C8 6 5 10 5 14a7 7 0 0 0 14 0c0-4-3-8-7-12z"/></svg></div>
+        <div class="mech-text">
+          <div class="mech-name">Scope growth</div>
+          <div class="mech-desc">The longer a house sits untouched, the more mold spreads and the more area needs stripping and repainting. This starts at day <strong id="mScopeThreshold">-</strong>, the average time mold takes to establish.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card chart-card">
+    <div class="card-head">
+      <div class="card-title">Repair Cost Over Time</div>
+      <div class="card-sub">Static estimate vs. actual, as repairs complete</div>
+    </div>
+    <div class="card-body">
+      <iframe src="../../../Output/price_over_time.html?embedded=1&colors=swap" title="Repair cost over time, static vs actual" loading="lazy"></iframe>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const d = window.OW_DATA;
+  const fmtM = (v) => '$' + (v / 1e6).toFixed(1) + 'M';
+
+  document.getElementById('mInsuranceDays').textContent = d.repairModel.insuranceDelay.meanDays.toFixed(0);
+  document.getElementById('mSurgePeak').textContent = d.repairModel.surge.rampPeakDay;
+  document.getElementById('mWarehouses').textContent = 7;
+  document.getElementById('mStockoutDay').textContent = d.repairModel.stockout.stockoutDay;
+  document.getElementById('mScopeThreshold').textContent = d.repairModel.scopeGrowth.thresholdDays;
+
+  // ---------------- donut: exact scope / surge / stockout attribution ----------------
+  const attr = d.mechanism.attribution;
+  const segments = [
+    { key: 'scope', label: 'Scope growth', hex: '#1c4fb8' },
+    { key: 'surge', label: 'Market surge', hex: '#5b8def' },
+    { key: 'stockout', label: 'Stockout logistics', hex: '#b9d2f7' },
+  ];
+
+  document.getElementById('donutCenter').textContent = fmtM(attr.totalUpliftAud);
+
+  const R = 50, CX = 60, CY = 60, CIRC = 2 * Math.PI * R, STROKE = 20;
+  const svg = document.getElementById('donutSvg');
+  const tooltip = document.getElementById('donutTooltip');
+  const donutWrap = document.getElementById('donutWrap');
+  svg.innerHTML = `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="#eef0f2" stroke-width="${STROKE}"/>`;
+
+  function showTooltip(seg, evt) {
+    document.getElementById('dtName').textContent = seg.label;
+    document.getElementById('dtPct').textContent = attr[seg.key].pct.toFixed(1) + '%';
+    document.getElementById('dtPct').style.color = seg.hex;
+    document.getElementById('dtAud').textContent = fmtM(attr[seg.key].aud);
+    const wrapRect = donutWrap.getBoundingClientRect();
+    tooltip.style.left = (evt.clientX - wrapRect.left) + 'px';
+    tooltip.style.top = Math.max(60, evt.clientY - wrapRect.top) + 'px';
+    tooltip.classList.add('visible');
+    svg.classList.add('has-hover');
+    svg.querySelectorAll('circle.donut-seg').forEach(c => c.classList.toggle('hovered', c.dataset.key === seg.key));
+  }
+  function hideTooltip() {
+    tooltip.classList.remove('visible');
+    svg.classList.remove('has-hover');
+    svg.querySelectorAll('circle.donut-seg').forEach(c => c.classList.remove('hovered'));
+  }
+
+  let offset = 0;
+  segments.forEach((s) => {
+    const frac = attr[s.key].pct / 100;
+    const len = frac * CIRC;
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', CX); circle.setAttribute('cy', CY); circle.setAttribute('r', R);
+    circle.setAttribute('fill', 'none');
+    circle.setAttribute('stroke', s.hex);
+    circle.setAttribute('stroke-width', STROKE);
+    circle.setAttribute('stroke-dasharray', `${len} ${CIRC - len}`);
+    circle.setAttribute('stroke-dashoffset', -offset);
+    circle.classList.add('donut-seg');
+    circle.dataset.key = s.key;
+    circle.addEventListener('mouseenter', (e) => showTooltip(s, e));
+    circle.addEventListener('mousemove', (e) => showTooltip(s, e));
+    circle.addEventListener('mouseleave', hideTooltip);
+    svg.appendChild(circle);
+    offset += len;
+  });
+
+  const dominant = segments.reduce((a, b) => attr[a.key].pct > attr[b.key].pct ? a : b);
+  const legend = document.getElementById('donutLegend');
+  segments.forEach((s) => {
+    const row = document.createElement('div');
+    row.className = 'dl-row';
+    row.innerHTML = `<span class="dl-swatch" style="background:${s.hex};"></span>` +
+      `<span>
+         <span class="dl-name">${s.label}</span> <span class="dl-pct">${attr[s.key].pct.toFixed(1)}%</span>
+         <span class="dl-aud">${fmtM(attr[s.key].aud)}</span>
+         ${s.key === dominant.key ? '<span class="dl-dominant">&larr; dominant driver</span>' : ''}
+       </span>`;
+    row.addEventListener('mouseenter', (e) => showTooltip(s, e));
+    row.addEventListener('mousemove', (e) => showTooltip(s, e));
+    row.addEventListener('mouseleave', hideTooltip);
+    legend.appendChild(row);
+  });
+</script>
+</body>
+</html>

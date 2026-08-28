@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Static Cost Engine</title>
+<link rel="stylesheet" href="../theme.css">
+<script src="../dashboard-data.js"></script>
+<style>
+  html, body { width: 1920px; height: 1080px; overflow: hidden; }
+  body { padding: 52px 0 40px; box-sizing: border-box; }
+
+  .ce-grid { display: grid; grid-template-columns: 0.92fr 1.18fr; gap: 26px; margin-top: 26px; align-items: start; }
+
+  /* ---------------- LEFT — data acquisition, step by step ---------------- */
+  .acq-flow { display: flex; flex-direction: column; }
+  .acq-step {
+    position: relative;
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start;
+  }
+  .acq-step + .acq-step { margin-top: 15px; }
+  .acq-connector {
+    position: absolute; left: 27px; top: 100%; width: 1px; height: 22px;
+    background: linear-gradient(180deg, var(--border-strong), transparent);
+  }
+  .acq-connector::after {
+    content: ''; position: absolute; left: -3px; bottom: -1px; width: 7px; height: 7px;
+    border-right: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong);
+    transform: rotate(45deg);
+  }
+  .acq-num {
+    flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .acq-body { flex: 1; min-width: 0; }
+  .acq-name { font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+  .acq-desc { font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.5; }
+  .acq-status {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+    margin-top: 6px; display: inline-block;
+  }
+  .acq-status.real { color: var(--credibility); }
+  .acq-status.partial { color: var(--amber); }
+
+  .acq-final {
+    background: linear-gradient(180deg, var(--static-dim), transparent 75%);
+    border: 1px solid var(--static-dim); border-radius: var(--radius-md);
+    padding: 12px 16px; margin-top: 15px; text-align: center;
+  }
+  .acq-final .af-title { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--static); }
+  .acq-final .af-sub { font-size: 11.5px; color: var(--text-secondary); margin-top: 4px; }
+
+  .split-bar { display: flex; height: 28px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border-strong); margin-top: 15px; }
+  .split-bar .seg-real { background: var(--credibility); display: flex; align-items: center; padding-left: 10px; font-family: var(--font-mono); font-size: 11px; color: #04140c; font-weight: 600; }
+  .split-bar .seg-synth { background: var(--bg-panel-hover); display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+
+  /* ---------------- RIGHT TOP — cost model outline ---------------- */
+  .outline-flow { display: flex; align-items: stretch; gap: 0; }
+  .outline-step {
+    flex: 1; background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 5px; justify-content: center;
+  }
+  .outline-step .os-label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-tertiary); }
+  .outline-step .os-title { font-size: 12.5px; font-weight: 600; color: var(--text-primary); line-height: 1.3; }
+  .outline-arrow { flex: 0 0 26px; display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); }
+  .outline-step.result { border-color: var(--static-dim); background: linear-gradient(180deg, var(--static-dim), transparent 70%); }
+  .outline-step.result .os-title { color: var(--static); font-family: var(--font-mono); font-size: 16px; }
+
+  .tier-table { margin-top: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+  .tier-row { display: grid; grid-template-columns: 168px 1fr; border-bottom: 1px solid var(--border); }
+  .tier-row:last-child { border-bottom: none; }
+  .tier-row .tier-name { padding: 11px 14px; font-family: var(--font-mono); font-size: 10.5px; color: var(--amber); background: var(--bg-raised); display: flex; align-items: center; }
+  .tier-row .tier-comps { padding: 11px 14px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tier-row .tag { font-size: 10px; padding: 3px 7px; }
+
+  /* ---------------- RIGHT BOTTOM — live depth-cost simulator widget ---------------- */
+  .sim-panel { margin-top: 20px; }
+  .sim-body { display: grid; grid-template-columns: 168px 1fr; gap: 22px; padding: 22px; }
+  @media (max-width: 620px) { .sim-body { grid-template-columns: 1fr; } }
+
+  .sim-house { display: flex; flex-direction: column; align-items: center; }
+  .sim-house svg { width: 100%; height: auto; }
+  .sim-slider-row { width: 100%; margin-top: 10px; }
+  .sim-slider-row input { width: 100%; accent-color: var(--static); }
+  .sim-depth-readout {
+    text-align: center; font-family: var(--font-mono); font-size: 20px; font-weight: 600; color: var(--static);
+    margin-top: 4px;
+  }
+  .sim-depth-label { text-align: center; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); }
+
+  .sim-comp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; align-content: start; }
+  .sim-card {
+    border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 10px;
+    background: var(--bg-raised); opacity: 0.32; transition: opacity 0.35s var(--ease), border-color 0.35s var(--ease), background 0.35s var(--ease);
+  }
+  .sim-card.lit { opacity: 1; border-color: var(--static-dim); background: linear-gradient(180deg, var(--static-dim), var(--bg-raised) 85%); }
+  .sim-card .sc-label { font-size: 11px; color: var(--text-secondary); line-height: 1.3; }
+  .sim-card.lit .sc-label { color: var(--text-primary); }
+  .sim-card .sc-value { font-family: var(--font-mono); font-size: 13px; font-weight: 600; margin-top: 5px; color: var(--text-tertiary); }
+  .sim-card.lit .sc-value { color: var(--static); }
+
+  .sim-total-row {
+    grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline;
+    border-top: 1px solid var(--border); margin-top: 4px; padding-top: 14px;
+  }
+  .sim-total-row .st-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); }
+  .sim-total-row .st-value { font-family: var(--font-mono); font-size: 26px; font-weight: 600; color: var(--text-primary); }
+</style>
+</head>
+<body>
+
+<section class="container">
+  <div class="reveal">
+    <div class="eyebrow"><span class="idx">03</span> How The Static Cost Engine Was Built</div>
+    <h2 class="section-title">From five real sources to a dollar figure</h2>
+    <p class="section-dek">
+      Every flooded property is priced the instant it first floods above its floor — real
+      addresses and elevation locate and ground it, then nine unit-cost components trigger
+      independently at their own depth threshold, not all-or-nothing.
+    </p>
+  </div>
+
+  <div class="ce-grid">
+
+    <!-- ============== LEFT — data acquisition, step by step ============== -->
+    <div class="reveal">
+      <div class="sub-eyebrow" style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--static);margin-bottom:14px;">Data acquisition</div>
+
+      <div class="acq-flow">
+        <div class="acq-step">
+          <div class="acq-connector"></div>
+          <div class="acq-num">1</div>
+          <div class="acq-body">
+            <div class="acq-name">G-NAF address register</div>
+            <div class="acq-desc">Geoscape addresses, filtered to Lismore / South Lismore / East Lismore / Goonellabah / Girards Hill / Loftville — places every property.</div>
+            <span class="acq-status real">Real</span>
+          </div>
+        </div>
+        <div class="acq-step">
+          <div class="acq-connector"></div>
+          <div class="acq-num">2</div>
+          <div class="acq-body">
+            <div class="acq-name">1m LiDAR DEM</div>
+            <div class="acq-desc">NSW Spatial Services ground elevation, AHD datum, 35 tiles — gives every property its ground_elevation_m_ahd.</div>
+            <span class="acq-status real">Real</span>
+          </div>
+        </div>
+        <div class="acq-step">
+          <div class="acq-connector"></div>
+          <div class="acq-num">3</div>
+          <div class="acq-body">
+            <div class="acq-name">OpenStreetMap footprints</div>
+            <div class="acq-desc">Building footprint &amp; floor area via Overpass export — sizes each property's cost base.</div>
+            <span class="acq-status partial">Real · partial coverage</span>
+          </div>
+        </div>
+        <div class="acq-step">
+          <div class="acq-connector"></div>
+          <div class="acq-num">4</div>
+          <div class="acq-body">
+            <div class="acq-name">ABS Census 2021</div>
+            <div class="acq-desc">Dwelling-structure mix — calibrates the synthetic construction-type &amp; housing-stock distributions.</div>
+            <span class="acq-status real">Real</span>
+          </div>
+        </div>
+        <div class="acq-step">
+          <div class="acq-num">5</div>
+          <div class="acq-body">
+            <div class="acq-name">Engeny / DCCEEW report</div>
+            <div class="acq-desc">"Lismore 2022 Post Flood Event Analysis" — hydrograph, floor-height methodology, hazard zoning, $587M damage benchmark.</div>
+            <span class="acq-status real">Real</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="acq-final">
+        <div class="af-title">→ Combined property record</div>
+        <div class="af-sub">Everything else (construction type, unit costs, timing) is plausibly-calibrated synthetic data, generated in a step kept separate from real-data cleaning &amp; joining.</div>
+      </div>
+
+      <div class="split-bar" id="splitBar"></div>
+      <div class="flex-between" style="margin-top:8px;">
+        <span class="footnote">Schema fields: real vs. synthetic</span>
+        <span class="footnote mono" id="splitCount"></span>
+      </div>
+
+      <details class="disclosure" style="margin-top:15px;">
+        <summary>Full field-by-field breakdown — technical detail</summary>
+        <div class="disclosure-body">
+          <p>Provenance of every column is traceable — see <code>SYNTHETIC_ASSUMPTIONS.md</code> at the
+          project root for the complete, per-field writeup.</p>
+          <p style="margin-top:10px;"><strong style="color:var(--text-primary);">Real / real-derived:</strong>
+          <code>property_id</code>, <code>address</code>, <code>suburb</code>, <code>postcode</code>,
+          <code>latitude</code>, <code>longitude</code>, <code>ground_elevation_m_ahd</code>,
+          <code>building_footprint</code>, <code>dwelling_structure_census</code>,
+          <code>peak_water_level_m_ahd</code>.</p>
+          <p style="margin-top:10px;"><strong style="color:var(--text-primary);">Synthetic, calibrated:</strong>
+          construction type, switchboard type, circuit count, kitchen spec, flooring, building age,
+          every unit cost in <code>base_pricing.py</code>, insurance delay, queue position, job
+          duration, market-pricing surge/stockout parameters, and scope growth.</p>
+        </div>
+      </details>
+    </div>
+
+    <!-- ============== RIGHT — cost model outline + live widget ============== -->
+    <div>
+      <div class="reveal">
+        <div class="sub-eyebrow" style="font-family:var(--font-mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--static);margin-bottom:14px;">Cost model outline</div>
+        <div class="outline-flow">
+          <div class="outline-step">
+            <div class="os-label">Input</div>
+            <div class="os-title">Property characteristics<br>+ peak flood depth above floor</div>
+          </div>
+          <div class="outline-arrow">→</div>
+          <div class="outline-step">
+            <div class="os-label">Trigger logic</div>
+            <div class="os-title">Depth-tiered triggers<br>(3 thresholds, 9 components)</div>
+          </div>
+          <div class="outline-arrow">→</div>
+          <div class="outline-step">
+            <div class="os-label">Pricing</div>
+            <div class="os-title">Regional unit-cost rates<br>+ log-normal volatility</div>
+          </div>
+          <div class="outline-arrow">→</div>
+          <div class="outline-step result">
+            <div class="os-label">Output</div>
+            <div class="os-title" id="flowTotal">—</div>
+          </div>
+        </div>
+
+        <div class="tier-table">
+          <div class="tier-row">
+            <div class="tier-name">Always &middot; depth &gt; 0</div>
+            <div class="tier-comps"><span class="tag">Flooring</span><span class="tag">Drying / decon</span><span class="tag">Demolition</span></div>
+          </div>
+          <div class="tier-row">
+            <div class="tier-name">&gt; 0.05m &middot; baseboard</div>
+            <div class="tier-comps"><span class="tag">Plasterboard</span><span class="tag">Painting</span><span class="tag">Kitchen</span><span class="tag">Appliances</span></div>
+          </div>
+          <div class="tier-row">
+            <div class="tier-name">&gt; 0.25m &middot; outlet height</div>
+            <div class="tier-comps"><span class="tag">Switchboard</span><span class="tag">Electrical</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel sim-panel reveal">
+        <div class="panel-header">
+          <span class="panel-title">Live depth-cost simulator</span>
+          <span class="panel-tag">Drag the slider — real median component costs</span>
+        </div>
+        <div class="sim-body">
+          <div class="sim-house">
+            <svg viewBox="0 0 160 170">
+              <polygon points="20,70 80,25 140,70 140,155 20,155" fill="#141a24" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+              <line x1="80" y1="90" x2="80" y2="155" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+              <line x1="20" y1="118" x2="140" y2="118" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="3,3"/>
+              <text x="24" y="114" font-size="7" fill="#5b6377" font-family="IBM Plex Mono, monospace">FLOOR</text>
+              <clipPath id="simWaterClip"><rect id="simWaterRect" x="20" y="155" width="120" height="0"/></clipPath>
+              <g clip-path="url(#simWaterClip)">
+                <rect x="20" y="70" width="120" height="90" fill="#4d8dff" fill-opacity="0.55"/>
+              </g>
+              <rect x="20" y="70" width="120" height="85" fill="none"/>
+            </svg>
+            <div class="sim-slider-row">
+              <input type="range" id="simSlider" min="0" max="200" step="1" value="0">
+            </div>
+            <div class="sim-depth-readout" id="simDepthVal">0.00m</div>
+            <div class="sim-depth-label">Depth above floor</div>
+          </div>
+
+          <div class="sim-comp-grid" id="simCompGrid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const d = window.OW_DATA;
+  const fmtM = (v) => '$' + (v / 1e6).toFixed(1) + 'M';
+  const fmtK = (v) => '$' + v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+
+  document.getElementById('flowTotal').textContent = fmtM(d.hero.staticTotalAud) + ' total';
+
+  const real = d.dataSchema.realFieldCount, synth = d.dataSchema.syntheticFieldCount;
+  const total = real + synth;
+  const realPct = Math.round((real / total) * 100);
+  document.getElementById('splitBar').innerHTML =
+    `<div class="seg-real" style="width:${realPct}%;">${real} real</div>` +
+    `<div class="seg-synth" style="width:${100 - realPct}%;">${synth} synthetic</div>`;
+  document.getElementById('splitCount').textContent = `${realPct}% of schema fields real-sourced`;
+
+  // ---------------- live depth-cost simulator ----------------
+  const comps = d.costEngine.componentMedians; // [{key,label,tier,medianAud}]
+  const grid = document.getElementById('simCompGrid');
+  comps.forEach((c) => {
+    const card = document.createElement('div');
+    card.className = 'sim-card';
+    card.dataset.tier = c.tier;
+    card.innerHTML = `<div class="sc-label">${c.label}</div><div class="sc-value">${fmtK(c.medianAud)}</div>`;
+    grid.appendChild(card);
+  });
+  const totalRow = document.createElement('div');
+  totalRow.className = 'sim-total-row';
+  totalRow.innerHTML = `<span class="st-label">Running total</span><span class="st-value" id="simTotal">$0</span>`;
+  grid.appendChild(totalRow);
+
+  const slider = document.getElementById('simSlider');
+  const depthVal = document.getElementById('simDepthVal');
+  const waterRect = document.getElementById('simWaterRect');
+  const simTotal = document.getElementById('simTotal');
+  const MAX_DEPTH = 2.0; // slider domain, metres
+  const MAX_WATER_H = 85; // px, matches the house cross-section illustration
+
+  function tierForDepth(depth) {
+    if (depth > 0.25) return 2;
+    if (depth > 0.05) return 1;
+    if (depth > 0) return 0;
+    return -1;
+  }
+
+  function update() {
+    const depth = (+slider.value / 100); // 0..2.00
+    depthVal.textContent = depth.toFixed(2) + 'm';
+    const h = Math.min(MAX_WATER_H, (depth / MAX_DEPTH) * MAX_WATER_H * (MAX_DEPTH / 0.6));
+    const clamped = Math.min(MAX_WATER_H, h);
+    waterRect.setAttribute('y', 155 - clamped);
+    waterRect.setAttribute('height', clamped);
+
+    const activeTier = tierForDepth(depth);
+    let sum = 0;
+    document.querySelectorAll('.sim-card').forEach((card) => {
+      const t = +card.dataset.tier;
+      const lit = t <= activeTier;
+      card.classList.toggle('lit', lit);
+      if (lit) sum += comps[[...grid.querySelectorAll('.sim-card')].indexOf(card)].medianAud;
+    });
+    simTotal.textContent = fmtK(sum);
+  }
+  slider.addEventListener('input', update);
+  update();
+</script>
+<script src="../embed.js"></script>
+</body>
+</html>
