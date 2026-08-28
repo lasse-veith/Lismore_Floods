@@ -1,0 +1,357 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Lismore 2022 Flood, River Level Over Time</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  @font-face {
+    font-family: 'Saira';
+    src: url('../UI%20Design/presentation/assets/fonts/Saira-Variable.ttf') format('truetype');
+    font-weight: 100 900; font-stretch: 50% 125%; font-style: normal;
+  }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: 'Saira', -apple-system, sans-serif; background: #f2f3f5; }
+  #wrap { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: 20px 22px 16px; }
+  h1 { color: #14161a; font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: #9aa1ac; font-size: 11.5px; margin-top: 2px; }
+  #chartCard {
+    background: #fff; border-radius: 18px; padding: 18px 20px 14px;
+    box-shadow: 0 1px 2px rgba(16,20,27,0.04), 0 10px 24px -12px rgba(16,20,27,0.12);
+    flex: 1; min-height: 0; display: flex; flex-direction: column; box-sizing: border-box;
+  }
+  .chart-head { display: flex; align-items: flex-start; justify-content: space-between; flex-shrink: 0; }
+  .chart-legend { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #6b7280; }
+  .chart-legend .dot { width: 8px; height: 8px; border-radius: 50%; background: #3b6fd6; flex-shrink: 0; }
+  .chart-legend .dot2 { width: 6px; height: 6px; border-radius: 50%; background: #14161a; flex-shrink: 0; margin-left: 10px; }
+  #canvasWrap { position: relative; flex: 1; min-height: 0; margin-top: 8px; }
+  canvas { width: 100%; height: 100%; display: block; }
+  #statsRow { display: flex; justify-content: flex-start; gap: 26px; margin-top: 10px; flex-wrap: wrap; flex-shrink: 0; }
+  .statBox .label { color: #9aa1ac; font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; font-family: 'Saira', monospace; }
+  .statBox .value { font-size: 17px; font-weight: 600; margin-top: 2px; font-family: 'Saira', monospace; }
+  #dateValue { color: #14161a; }
+  #levelValue { color: #3b6fd6; }
+  #controls { display: flex; align-items: center; gap: 12px; padding-top: 12px; flex-shrink: 0; }
+  #playBtn {
+    cursor: pointer; border: none; background: #3b6fd6; color: #fff; border-radius: 999px; font-family: 'Saira', sans-serif;
+    padding: 8px 16px; font-size: 12.5px; font-weight: 600; flex-shrink: 0;
+  }
+  #playBtn:hover { background: #2f5fc0; }
+  #slider { flex: 1; accent-color: #3b6fd6; }
+  /* embedded mode: the parent page supplies its own heading + shared time
+     control (see pages/flood.html), so this chart's own title/controls
+     would just be a redundant duplicate — trimmed to the card + live stats. */
+  .embedded #wrap { padding: 4px; }
+  .embedded h1, .embedded .sub, .embedded #controls { display: none; }
+  .embedded #chartCard { box-shadow: none; border-radius: 0; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>River Level Over Time</h1>
+  <div class="sub">Wilsons River gauge level (m AHD), real hydrograph, synced with the flood map</div>
+  <div id="chartCard">
+    <div class="chart-head">
+      <div></div>
+      <div class="chart-legend"><span class="dot"></span> Water level<span class="dot2"></span> Real reading</div>
+    </div>
+    <div id="canvasWrap">
+      <canvas id="chart"></canvas>
+    </div>
+    <div id="statsRow">
+      <div class="statBox"><div class="label">Date / time</div><div class="value" id="dateValue">-</div></div>
+      <div class="statBox"><div class="label">River level</div><div class="value" id="levelValue">0.0m AHD</div></div>
+    </div>
+    <div id="controls">
+      <button id="playBtn">&#9654; Play</button>
+      <input type="range" id="slider" min="0" max="126" step="1" value="0">
+    </div>
+  </div>
+</div>
+<script>
+  // Embedded mode (?embedded=1): a parent page supplies one shared time
+  // control for this chart + the paired flood map — see pages/flood.html.
+  if (new URLSearchParams(location.search).has('embedded')) {
+    document.documentElement.classList.add('embedded');
+  }
+</script>
+<script>
+const HOURS = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 102, 104, 106, 108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 152, 154, 156, 158, 160, 162, 164, 166, 168, 170, 172, 174, 176, 178, 180, 182, 184, 186, 188, 190, 192, 194, 196, 198, 200, 202, 204, 206, 208, 210, 212, 214, 216, 218, 220, 222, 224, 226, 228, 230, 232, 234, 236, 238, 240, 242, 244, 246, 248, 250, 252];
+const LEVELS = [0.0, 0.108, 0.212, 0.307, 0.389, 0.455, 0.5, 0.524, 0.547, 0.592, 0.683, 0.845, 1.1, 1.465, 1.923, 2.45, 3.022, 3.613, 4.2, 4.76, 5.282, 5.757, 6.174, 6.525, 6.8, 6.994, 7.114, 7.173, 7.182, 7.154, 7.1, 7.03, 6.947, 6.851, 6.744, 6.627, 6.5, 6.364, 6.218, 6.059, 5.888, 5.702, 5.5, 5.283, 5.067, 4.867, 4.703, 4.591, 4.55, 4.592, 4.711, 4.897, 5.139, 5.427, 5.75, 6.103, 6.503, 6.971, 7.528, 8.197, 9.0, 9.942, 10.965, 11.996, 12.961, 13.787, 14.4, 14.4, 14.4, 14.4, 14.4, 14.25, 13.9, 13.55, 13.21, 12.883, 12.571, 12.276, 12.0, 11.746, 11.512, 11.297, 11.099, 10.918, 10.75, 10.594, 10.444, 10.291, 10.13, 9.952, 9.75, 9.52, 9.269, 9.006, 8.742, 8.487, 8.25, 8.039, 7.852, 7.685, 7.531, 7.388, 7.25, 7.113, 6.979, 6.849, 6.725, 6.608, 6.5, 6.403, 6.314, 6.232, 6.154, 6.077, 6.0, 5.92, 5.839, 5.755, 5.67, 5.585, 5.5, 5.416, 5.332, 5.248, 5.165, 5.083, 5.0];
+const IS_READING = [true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, true];
+const PEAK_HOUR_REAL = 132.0;
+const PEAK_LEVEL_REAL = 14.4;
+const PEAK_LABEL_TEXT = "Flood peak: 14.4m on Feb 28th at about 3pm";
+const EVENT_START_ISO = "2022-02-23T00:00:00Z";
+const PLAY_INTERVAL_MS = 150; // matches flood_heat_map.html's own PLAY_INTERVAL_MS — kept in lockstep
+const N = HOURS.length;
+const MAX_HOUR = HOURS[N - 1];
+const MAX_Y = Math.max(...LEVELS) * 1.15;
+
+function formatDateTime(hour) {
+  const d = new Date(EVENT_START_ISO);
+  d.setUTCHours(d.getUTCHours() + hour);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
+const canvas = document.getElementById('chart');
+const canvasWrap = document.getElementById('canvasWrap');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+const PAD = { left: 46, right: 14, top: 16, bottom: 26 };
+let lastFrame = 0;
+
+function resizeCanvas() {
+  W = canvasWrap.clientWidth;
+  H = canvasWrap.clientHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  render(lastFrame);
+}
+
+function xPix(hour) { return PAD.left + (hour / MAX_HOUR) * (W - PAD.left - PAD.right); }
+function yPix(val) { return H - PAD.bottom - (val / MAX_Y) * (H - PAD.top - PAD.bottom); }
+
+function drawAxes() {
+  ctx.fillStyle = '#b6bbc4';
+  ctx.font = '11px "Saira", sans-serif';
+  ctx.lineWidth = 1;
+
+  const yTicks = 4;
+  for (let i = 0; i <= yTicks; i++) {
+    const val = (MAX_Y / yTicks) * i;
+    const y = yPix(val);
+    ctx.strokeStyle = 'rgba(16,20,27,0.06)';
+    ctx.beginPath();
+    ctx.moveTo(PAD.left, y);
+    ctx.lineTo(W - PAD.right, y);
+    ctx.stroke();
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(val.toFixed(0) + 'm', PAD.left - 10, y);
+  }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const xTickCount = 5;
+  for (let i = 0; i <= xTickCount; i++) {
+    const hour = Math.round((MAX_HOUR / xTickCount) * i / 12) * 12;
+    const x = xPix(hour);
+    ctx.fillText('+' + hour + 'h', x, H - PAD.bottom + 8);
+  }
+}
+
+function pathForCurve(hours, values, upToIndex) {
+  // Smoothed with quadratic-curve-through-midpoints (the standard canvas
+  // line-smoothing trick) — applied on top of data that is ALREADY a
+  // natural cubic spline fit (heat_map.py's natural_cubic_spline()), not
+  // re-derived here — this only smooths the polyline connecting
+  // already-spline-fitted points for crisp rendering at any resolution.
+  const pts = [];
+  for (let i = 0; i <= upToIndex; i++) pts.push({ x: xPix(hours[i]), y: yPix(values[i]) });
+  const path = new Path2D();
+  if (pts.length === 1) {
+    path.moveTo(pts[0].x, pts[0].y);
+    path.lineTo(pts[0].x, pts[0].y);
+  } else {
+    path.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const xMid = (pts[i].x + pts[i + 1].x) / 2;
+      const yMid = (pts[i].y + pts[i + 1].y) / 2;
+      path.quadraticCurveTo(pts[i].x, pts[i].y, xMid, yMid);
+    }
+    const last = pts[pts.length - 1], secondLast = pts[pts.length - 2];
+    path.quadraticCurveTo(secondLast.x, secondLast.y, last.x, last.y);
+  }
+  return { path, lastPoint: pts[pts.length - 1] };
+}
+
+function drawCurvedLine(hours, values, upToIndex, color) {
+  const { path, lastPoint } = pathForCurve(hours, values, upToIndex);
+
+  // soft gradient fill under the curve, fading to transparent
+  const fillPath = new Path2D(path);
+  const lastX = xPix(hours[upToIndex]);
+  fillPath.lineTo(lastX, H - PAD.bottom);
+  fillPath.lineTo(xPix(hours[0]), H - PAD.bottom);
+  fillPath.closePath();
+  const grad = ctx.createLinearGradient(0, PAD.top, 0, H - PAD.bottom);
+  grad.addColorStop(0, 'rgba(59,111,214,0.22)');
+  grad.addColorStop(1, 'rgba(59,111,214,0.0)');
+  ctx.fillStyle = grad;
+  ctx.fill(fillPath);
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke(path);
+
+  if (upToIndex >= 0) {
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(lastPoint.x, lastPoint.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  return lastPoint;
+}
+
+function drawRealReadingDots(upToIndex) {
+  ctx.fillStyle = '#14161a';
+  for (let i = 0; i <= upToIndex; i++) {
+    if (!IS_READING[i]) continue;
+    const x = xPix(HOURS[i]);
+    const y = yPix(LEVELS[i]);
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawPeakLabel(upToIndex) {
+  if (HOURS[upToIndex] < PEAK_HOUR_REAL) return;
+  const x = xPix(PEAK_HOUR_REAL);
+  const y = yPix(PEAK_LEVEL_REAL);
+
+  ctx.fillStyle = '#c98a1a';
+  ctx.beginPath();
+  ctx.arc(x, y, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Box sits to the LEFT of the peak, vertically centred on it — not above,
+  // since the real peak sits close enough to the top of the chart that a
+  // box placed above it can run past the canvas edge and get clipped.
+  const boxH = 26;
+  ctx.font = '600 11px "Saira", sans-serif';
+  const textWidth = ctx.measureText(PEAK_LABEL_TEXT).width;
+  const boxW = textWidth + 20;
+  const gap = 14;
+
+  let boxX = x - gap - boxW;
+  if (boxX < PAD.left) boxX = x + gap; // not enough room on the left — fall back to the right instead
+  let boxY = y - boxH / 2;
+  boxY = Math.min(Math.max(boxY, PAD.top), H - PAD.bottom - boxH);
+
+  ctx.strokeStyle = 'rgba(201,138,26,0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([2, 3]);
+  ctx.beginPath();
+  ctx.moveTo(boxX < x ? boxX + boxW : boxX, y);
+  ctx.lineTo(x - (boxX < x ? 4 : -4), y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = 'rgba(16,20,27,0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(boxX, boxY, boxW, boxH, 8);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#c98a1a';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(PEAK_LABEL_TEXT, boxX + 10, boxY + 14);
+}
+
+/* "live" tooltip card that tracks the current point — the same visual
+   language as a hover tooltip, but always shown at the current frame since
+   position here is driven by the shared time slider, not the mouse. */
+function drawLiveTooltip(point, hour, level) {
+  const label = formatDateTime(hour);
+  const valueText = level.toFixed(2) + 'm AHD';
+  ctx.font = '600 11px "Saira", sans-serif';
+  const w1 = ctx.measureText(label).width;
+  ctx.font = '600 13px "Saira", monospace';
+  const w2 = ctx.measureText(valueText).width;
+  const boxW = Math.max(w1, w2) + 24;
+  const boxH = 46;
+
+  let boxX = point.x + 14;
+  if (boxX + boxW > W - PAD.right) boxX = point.x - boxW - 14;
+  let boxY = point.y - boxH - 12;
+  if (boxY < PAD.top) boxY = point.y + 12;
+
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = 'rgba(16,20,27,0.08)';
+  ctx.lineWidth = 1;
+  ctx.shadowColor = 'rgba(16,20,27,0.18)';
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetY = 4;
+  ctx.beginPath();
+  ctx.roundRect(boxX, boxY, boxW, boxH, 10);
+  ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  ctx.stroke();
+
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.font = '500 10.5px "Saira", sans-serif';
+  ctx.fillStyle = '#9aa1ac';
+  ctx.fillText(label, boxX + 12, boxY + 8);
+  ctx.font = '600 13px "Saira", monospace';
+  ctx.fillStyle = '#3b6fd6';
+  ctx.fillText(valueText, boxX + 12, boxY + 22);
+}
+
+function updateStats(i) {
+  const hour = HOURS[i];
+  document.getElementById('dateValue').textContent = formatDateTime(hour);
+  document.getElementById('levelValue').textContent = LEVELS[i].toFixed(2) + 'm AHD';
+}
+
+function render(i) {
+  lastFrame = i;
+  if (!W || !H) return;
+  ctx.clearRect(0, 0, W, H);
+  drawAxes();
+  const point = drawCurvedLine(HOURS, LEVELS, i, '#3b6fd6');
+  drawRealReadingDots(i);
+  drawPeakLabel(i);
+  drawLiveTooltip(point, HOURS[i], LEVELS[i]);
+  updateStats(i);
+}
+
+window.addEventListener('resize', resizeCanvas);
+if (window.ResizeObserver) new ResizeObserver(resizeCanvas).observe(canvasWrap);
+
+const slider = document.getElementById('slider');
+slider.addEventListener('input', (e) => render(+e.target.value));
+
+let playing = false, playTimer = null;
+const playBtn = document.getElementById('playBtn');
+
+function startPlaying() {
+  playing = true;
+  playBtn.innerHTML = '&#10074;&#10074; Pause';
+  const step = () => {
+    let next = (+slider.value + 1) % N;
+    slider.value = next;
+    render(next);
+    playTimer = setTimeout(step, PLAY_INTERVAL_MS);
+  };
+  playTimer = setTimeout(step, PLAY_INTERVAL_MS);
+}
+function stopPlaying() {
+  playing = false;
+  playBtn.innerHTML = '&#9654; Play';
+  clearTimeout(playTimer);
+}
+playBtn.addEventListener('click', () => {
+  if (playing) { stopPlaying(); return; }
+  startPlaying();
+});
+
+resizeCanvas();
+
+// --- shared time-control protocol (see pages/flood.html) ---
+window.parent.postMessage({ type: 'ow-river-ready', maxIndex: N - 1 }, '*');
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'ow-seek') render(e.data.frame);
+});
+</script>
+</body>
+</html>
